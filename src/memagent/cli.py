@@ -1,16 +1,21 @@
-"""Typer CLI — the four-subcommand user surface.
+"""Typer CLI — the four-subcommand user surface (all real as of M4).
 
-M1: wipe-memory is fully functional; ask/chat/analytics are stubs replaced in
-M2/M4 (replacing a stub must not change its call sites).
+stdout carries ONLY banners, answers, and sources (pipe-clean, FR-M4-21); operational
+structlog lines go to stderr with turn_id bound. The miss banner below is THE canonical
+string — ask and chat share the same constant, byte-identical.
 """
 
 import asyncio
+import json
+from pathlib import Path
 
 import redis.asyncio as aioredis
 import typer
 from redis import exceptions as redis_exceptions
 from redisvl.exceptions import RedisSearchError
+from rich.console import Console
 
+from memagent.analytics.report import aggregate, render_report
 from memagent.config import Settings
 from memagent.memory.schema import get_index, wipe_index
 
@@ -18,6 +23,21 @@ app = typer.Typer(add_completion=False, help="Memory-first web agent")
 
 # redis-py's ConnectionError/TimeoutError do NOT subclass the builtins.
 _REDIS_DOWN = (redis_exceptions.ConnectionError, redis_exceptions.TimeoutError, OSError)
+
+# The ONE canonical miss banner (arrow included) — reused verbatim by ask AND chat.
+MISS_BANNER = "[MEMORY MISS → searching the web]"
+ANSWER_NODES = {"answer_from_memory", "answer_from_web", "answer_failure"}
+
+
+def _hit_banner(sim: float) -> str:
+    return f"[MEMORY HIT sim={sim:.2f}]"
+
+
+def _print_sources(sources: list[dict]) -> None:
+    if sources:
+        typer.echo("")
+        for src in sources:
+            typer.echo(f"({src['origin']}) {src['title']} <{src['url']}>")
 
 
 def _redis_down_in_chain(exc: BaseException) -> bool:
@@ -81,7 +101,7 @@ def ask(query: str) -> None:
         )
         raise typer.Exit(code=1)
     try:
-        result = asyncio.run(_ask(query))
+        result = asyncio.run(_ask(query, settings))
     except _REDIS_DOWN as exc:
         _exit_redis_down(settings, exc)
     except RedisSearchError as exc:
@@ -89,30 +109,109 @@ def ask(query: str) -> None:
             raise
         _exit_redis_down(settings, exc)
     if result.route == "memory_hit":
-        typer.echo(f"[MEMORY HIT sim={result.similarity:.2f}]")
+        typer.echo(_hit_banner(result.similarity))
     else:
-        # The ONE canonical miss banner — M4's chat REPL reuses this exact string.
-        typer.echo("[MEMORY MISS → searching the web]")
+        typer.echo(MISS_BANNER)
     typer.echo(result.answer or "")
-    if result.sources:
-        typer.echo("")
-        for src in result.sources:
-            typer.echo(f"({src['origin']}) {src['title']} <{src['url']}>")
+    _print_sources(result.sources)
 
 
-async def _ask(query: str):
-    from memagent.app import Agent
+async def _ask(query: str, settings: Settings):
+    from memagent.app import Agent, configure_logging
 
+    configure_logging(settings)
     return await Agent().answer(query)
 
 
 @app.command()
 def chat() -> None:
-    """Interactive REPL (wired in M4)."""
-    typer.echo("[stub] chat REPL is wired in M4.")
+    """Interactive REPL: streaming turns with hit/miss banners, history capped at 6."""
+    settings = Settings()
+    if not settings.openai_api_key:
+        typer.echo(
+            "error: OPENAI_API_KEY is not set - add it to .env "
+            "(a GitHub Models PAT works for free development; see README).",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    try:
+        asyncio.run(_chat(settings))
+    except _REDIS_DOWN as exc:
+        _exit_redis_down(settings, exc)
+    except RedisSearchError as exc:
+        if not _redis_down_in_chain(exc):
+            raise
+        _exit_redis_down(settings, exc)
+
+
+async def _chat(settings: Settings) -> None:
+    import structlog
+
+    from memagent.app import Agent, configure_logging, new_turn_state
+
+    configure_logging(settings)
+    agent = Agent()
+    history: list[dict] = []
+    typer.echo("memagent chat — type a question; exit/quit or Ctrl-D to leave.")
+    while True:
+        try:
+            query = (await asyncio.to_thread(input, "you> ")).strip()
+        except EOFError:
+            typer.echo("")
+            return
+        if not query:
+            continue
+        if query.lower() in {"exit", "quit"}:
+            return
+        state = new_turn_state(settings, agent.session_id, query, history)
+        # The REPL bypasses Agent.answer(), so it binds its own turn_id (FR-M4-21).
+        structlog.contextvars.bind_contextvars(turn_id=state["turn_id"])
+        answer = None
+        try:
+            async for chunk in agent.graph.astream(state, stream_mode="updates"):
+                for node, update in chunk.items():
+                    update = update or {}
+                    if node == "guard_input" and update.get("route") == "blocked":
+                        # dormant until M5 activates guard_input (Ruling F)
+                        if update.get("answer"):
+                            answer = update["answer"]
+                            typer.echo(answer)
+                    if node == "memory_search":
+                        sim = update.get("top_similarity")
+                        if sim is not None and sim >= state["threshold"]:
+                            typer.echo(_hit_banner(sim))
+                        else:
+                            typer.echo(MISS_BANNER)
+                    if node in ANSWER_NODES and update.get("answer"):
+                        answer = update["answer"]
+                        typer.echo(answer)  # on screen BEFORE log_turn/classify runs
+                        _print_sources(update.get("sources", []))
+        finally:
+            structlog.contextvars.clear_contextvars()
+        if answer:
+            history.append({"role": "user", "content": query})
+            history.append({"role": "assistant", "content": answer})
+            history[:] = history[-settings.history_max_turns * 2 :]
 
 
 @app.command()
-def analytics() -> None:
-    """Analytics report over logs/turns.jsonl (wired in M4)."""
-    typer.echo("[stub] analytics report is wired in M4.")
+def analytics(
+    json_output: bool = typer.Option(False, "--json", help="Print aggregates as JSON to stdout."),
+) -> None:
+    """Analytics report over logs/turns.jsonl (hit-rate, topics, question types)."""
+    # Pure file read: needs neither OPENAI_API_KEY nor Redis.
+    settings = Settings()
+    path = Path(settings.turn_log_path)
+    if not path.exists():
+        typer.echo(
+            "no turns logged yet — run `memagent ask` or `memagent chat` first "
+            "(see logs/turns.sample.jsonl for the record format)."
+        )
+        raise typer.Exit(code=0)
+    with path.open(encoding="utf-8") as f:
+        records = [json.loads(line) for line in f if line.strip()]
+    agg = aggregate(records)
+    if json_output:
+        typer.echo(json.dumps(agg))
+        return
+    render_report(agg, Console())

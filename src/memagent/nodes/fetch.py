@@ -1,14 +1,11 @@
 """fetch_pages node: filter URLs -> take top-N -> bounded concurrent fetch."""
 
-import time
-
 from memagent.resources import AgentResources
 from memagent.web.fetch import filter_urls
 
 
 def make_fetch_pages(resources: AgentResources):
     async def fetch_pages(state: dict) -> dict:
-        started = time.perf_counter()
         try:
             urls = filter_urls(
                 [r["url"] for r in state["search_results"]], resources.settings
@@ -26,7 +23,6 @@ def make_fetch_pages(resources: AgentResources):
                     }
                 ],
             }
-        update["latency_ms"] = {"fetch_pages": int((time.perf_counter() - started) * 1000)}
         return update
 
     return fetch_pages

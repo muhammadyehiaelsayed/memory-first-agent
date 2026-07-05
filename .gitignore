@@ -16,7 +16,7 @@ build/
 .coverage
 
 # Runtime artifacts
-logs/
+logs/turns.jsonl
 
 # OS / editor noise
 .DS_Store

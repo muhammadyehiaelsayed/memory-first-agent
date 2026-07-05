@@ -1,14 +1,18 @@
-"""Agent facade: build_resources() + Agent.answer() -> TurnResult."""
+"""Agent facade: build_resources() + Agent.answer() -> TurnResult + logging setup."""
 
+import logging
+import sys
 import time
 from typing import NamedTuple
 from uuid import uuid4
 
 import redis.asyncio as aioredis
+import structlog
 
+from memagent.analytics.turnlog import TurnLogger
 from memagent.config import Settings
 from memagent.graph import build_graph
-from memagent.llm.clients import OpenAIChatLLM, OpenAIEmbedder
+from memagent.llm.clients import build_openai_clients
 from memagent.memory.schema import assert_index_dims
 from memagent.memory.store import RedisMemoryStore
 from memagent.resources import AgentResources
@@ -24,27 +28,70 @@ class TurnResult(NamedTuple):
     similarity: float | None
 
 
-class _NoopTurnLogger:
-    """Stub — replaced by M4's JSONL TurnLogger."""
+def configure_logging(settings: Settings) -> None:
+    """Operational logs -> STDERR only (stdout stays pipe-clean, FR-M4-21)."""
+    logging.basicConfig(
+        stream=sys.stderr, level=getattr(logging, settings.log_level.upper(), logging.INFO)
+    )
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.dev.ConsoleRenderer(),
+        ],
+        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+    )
 
-    def log(self, record: dict) -> None:  # noqa: ARG002
-        return None
+
+def new_turn_state(
+    settings: Settings, session_id: str, query: str, history: list[dict] | None = None
+) -> dict:
+    """The ONE complete initial AgentState (FR-M2-22) — shared by Agent.answer and the REPL."""
+    return {
+        "turn_id": str(uuid4()),
+        "session_id": session_id,
+        "query": query,
+        "history": (history or [])[-settings.history_max_turns * 2 :],
+        "threshold": settings.similarity_threshold,
+        "guard_verdict": "allow",           # guard node activates in M5 (Ruling F)
+        "guardrail_events": [],
+        "sanitized_query": query,           # L1 sanitization lands in M5
+        "query_vector": None,
+        "memory_hits": [],
+        "top_similarity": None,
+        "search_results": [],
+        "fetched_docs": [],
+        "chunks": [],
+        "stored_chunk_ids": [],
+        "skip_store": False,
+        "route": "failed",
+        "degradation": None,
+        "answer": None,
+        "sources": [],
+        "errors": [],
+        "latency_ms": {},
+        "analytics": None,
+        "tokens": {},
+        "turn_started_at": time.perf_counter(),  # feeds latency_ms.total (log_turn)
+        "search_provider": None,
+    }
 
 
 def build_resources(settings: Settings | None = None) -> AgentResources:
     settings = settings if settings is not None else Settings()
-    embedder = OpenAIEmbedder(settings)
+    chat_llm, analytics_llm, embedder = build_openai_clients(settings)  # ONE shared transport
     assert_index_dims(embedder.dim, settings)
     client = aioredis.from_url(settings.redis_url)
     return AgentResources(
         settings=settings,
         memory=RedisMemoryStore(settings, client),
         embedder=embedder,
-        chat_llm=OpenAIChatLLM(settings, settings.conversation_model),
-        analytics_llm=OpenAIChatLLM(settings, settings.analytics_model),
+        chat_llm=chat_llm,
+        analytics_llm=analytics_llm,
         searcher=FallbackProvider(settings),
         fetcher=HttpxPageFetcher(settings),
-        turn_logger=_NoopTurnLogger(),
+        turn_logger=TurnLogger(settings.turn_log_path),
     )
 
 
@@ -55,36 +102,12 @@ class Agent:
         self.session_id = str(uuid4())
 
     async def answer(self, query: str) -> TurnResult:
-        settings = self.resources.settings
-        state = {
-            "turn_id": str(uuid4()),
-            "session_id": self.session_id,
-            "query": query,
-            "history": [],                      # per-turn stateless; REPL history is M4
-            "threshold": settings.similarity_threshold,
-            "guard_verdict": "allow",           # guard node activates in M5 (Ruling F)
-            "guardrail_events": [],
-            "sanitized_query": query,           # L1 sanitization lands in M5
-            "query_vector": None,
-            "memory_hits": [],
-            "top_similarity": None,
-            "search_results": [],
-            "fetched_docs": [],
-            "chunks": [],
-            "stored_chunk_ids": [],
-            "skip_store": False,
-            "route": "failed",
-            "degradation": None,
-            "answer": None,
-            "sources": [],
-            "errors": [],
-            "latency_ms": {},
-            "analytics": None,
-            "tokens": {},
-            "turn_started_at": time.perf_counter(),
-            "search_provider": None,
-        }
-        final = await self.graph.ainvoke(state)
+        state = new_turn_state(self.resources.settings, self.session_id, query)
+        structlog.contextvars.bind_contextvars(turn_id=state["turn_id"])
+        try:
+            final = await self.graph.ainvoke(state)
+        finally:
+            structlog.contextvars.clear_contextvars()
         return TurnResult(
             route=final["route"],
             answer=final.get("answer"),

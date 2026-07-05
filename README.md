@@ -31,6 +31,19 @@ Milestone 1 of 6 — repo scaffold, toolchain, and the `web_memory` Redis vector
 Verified at M1 (2026-07-05): `redis:8.2` ships FT.* in core; redisvl 0.23.0 provides
 `load(ttl=)`, `array_to_buffer`, and `VectorQuery` (no EXPIRE fallback needed).
 
+## Turn log & analytics
+
+Every turn appends one JSON record to `logs/turns.jsonl` (route, similarity, sources,
+latencies, token usage, query classification). `memagent analytics` renders hit-rate and
+topic/question-type tables over it (`--json` for machines); `logs/turns.sample.jsonl`
+ships so the report works on a fresh clone.
+
+The turn log is directly DuckDB-queryable:
+
+```
+duckdb -c "SELECT route, count(*) FROM read_json_auto('logs/turns.jsonl') GROUP BY route"
+```
+
 ## Architecture
 
 _To be filled in M6: auto-generated LangGraph mermaid diagram (`scripts/render_graph.py`),
