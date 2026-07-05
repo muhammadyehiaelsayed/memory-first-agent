@@ -202,14 +202,28 @@ def analytics(
     # Pure file read: needs neither OPENAI_API_KEY nor Redis.
     settings = Settings()
     path = Path(settings.turn_log_path)
+    records: list[dict] = []
     if not path.exists():
+        # Guidance goes to stderr so `--json` stdout stays machine-parseable.
         typer.echo(
             "no turns logged yet — run `memagent ask` or `memagent chat` first "
-            "(see logs/turns.sample.jsonl for the record format)."
+            "(see logs/turns.sample.jsonl for the record format).",
+            err=True,
         )
-        raise typer.Exit(code=0)
-    with path.open(encoding="utf-8") as f:
-        records = [json.loads(line) for line in f if line.strip()]
+        if not json_output:
+            raise typer.Exit(code=0)
+    else:
+        corrupt = 0
+        with path.open(encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    corrupt += 1  # a crash mid-write must not take the report down
+        if corrupt:
+            typer.echo(f"warning: skipped {corrupt} corrupt line(s) in {path}", err=True)
     agg = aggregate(records)
     if json_output:
         typer.echo(json.dumps(agg))

@@ -34,7 +34,21 @@ def make_answer_from_memory(resources: AgentResources):
             *state.get("history", []),
             {"role": "user", "content": f"{context}\n\nQuestion: {state['query']}"},
         ]
-        result = await resources.chat_llm.complete(build_system_prompt(), messages)
+        try:
+            result = await resources.chat_llm.complete(build_system_prompt(), messages)
+        except Exception as exc:  # noqa: BLE001 — node owns degradation; retries are M5's
+            return {
+                "route": "failed",
+                "answer": FAILURE_APOLOGY,
+                "sources": [],
+                "errors": [
+                    {
+                        "node": "answer_from_memory",
+                        "error_type": type(exc).__name__,
+                        "detail": str(exc)[:200],
+                    }
+                ],
+            }
         sources = _dedupe_sources(hits, "memory")
         answer = result.text
         if "sources:" not in answer.lower():
