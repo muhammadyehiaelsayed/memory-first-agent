@@ -9,6 +9,7 @@ import asyncio
 import redis.asyncio as aioredis
 import typer
 from redis import exceptions as redis_exceptions
+from redisvl.exceptions import RedisSearchError
 
 from memagent.config import Settings
 from memagent.memory.schema import get_index, wipe_index
@@ -17,6 +18,29 @@ app = typer.Typer(add_completion=False, help="Memory-first web agent")
 
 # redis-py's ConnectionError/TimeoutError do NOT subclass the builtins.
 _REDIS_DOWN = (redis_exceptions.ConnectionError, redis_exceptions.TimeoutError, OSError)
+
+
+def _redis_down_in_chain(exc: BaseException) -> bool:
+    """redisvl wraps connection failures in RedisSearchError — walk the cause chain.
+
+    Found in the M3 manual test: `ask` with Redis down surfaced a RedisSearchError
+    traceback wall instead of the readable one-line error the CLI promises.
+    """
+    cause: BaseException | None = exc
+    while cause is not None:
+        if isinstance(cause, _REDIS_DOWN):
+            return True
+        cause = cause.__cause__
+    return False
+
+
+def _exit_redis_down(settings: Settings, exc: BaseException) -> None:
+    typer.echo(
+        f"error: cannot reach Redis at {settings.redis_url} - is it running? "
+        f"(make redis-up) [{exc.__class__.__name__}]",
+        err=True,
+    )
+    raise typer.Exit(code=1) from exc
 
 
 @app.command("wipe-memory")
@@ -59,12 +83,11 @@ def ask(query: str) -> None:
     try:
         result = asyncio.run(_ask(query))
     except _REDIS_DOWN as exc:
-        typer.echo(
-            f"error: cannot reach Redis at {settings.redis_url} - is it running? "
-            f"(make redis-up) [{exc.__class__.__name__}]",
-            err=True,
-        )
-        raise typer.Exit(code=1) from exc
+        _exit_redis_down(settings, exc)
+    except RedisSearchError as exc:
+        if not _redis_down_in_chain(exc):
+            raise
+        _exit_redis_down(settings, exc)
     if result.route == "memory_hit":
         typer.echo(f"[MEMORY HIT sim={result.similarity:.2f}]")
     else:
