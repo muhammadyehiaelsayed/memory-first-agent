@@ -101,6 +101,11 @@ instruction record:
   keys) and that the `logs/` directory ignore made the tracked sample log impossible.
 - M4's first live classified turn returned `language: "English"` instead of the ISO code —
   fixed with a schema field description and re-verified live (`"en"`).
+- M4's manual test session (run under a real GitHub Models rate-limit window) caught that
+  `answer_from_memory` — unlike its web sibling — didn't catch LLM failures: a live 429 on
+  the hit path crashed the chat REPL AND lost the turn's log record. Also caught: a corrupt
+  JSONL line crashed `memagent analytics`, and `--json` emitted prose on a missing log.
+  All three fixed and re-verified (see milestone-4.md §7a).
 - Every Definition of Done command was executed for real (see milestone log), not assumed.
 
 ## 7. What was deliberately NOT AI-generated

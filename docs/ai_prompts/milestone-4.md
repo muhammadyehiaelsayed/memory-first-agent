@@ -100,6 +100,39 @@ structlog + REPL (live piped chat: MISS then `[MEMORY HIT sim=0.74]`; stdout pip
   `Settings(_env_file=None)` to test pinned defaults (first T017 run failed on the dev
   alias override — corrected, both modes now asserted).
 
+## 7a. Manual test session findings (user request: "test it like if i test it manually", 2026-07-05)
+
+A full hands-on session was run after the DoD closed (same drill as M3 §5a). Three
+findings, two of them real bugs — both fixed and re-verified:
+
+- **BUG (fixed)**: `answer_from_memory` had a bare `chat_llm.complete()` while its
+  sibling `answer_from_web` catches LLM failures. A live GitHub Models **429
+  (RateLimitError) on the HIT path crashed `chat` with a typer traceback wall AND lost
+  the turn's record** (the exception fired before `log_turn` — breaking the
+  one-record-per-turn guarantee, FR-M4-09). Reproduced live twice under a real
+  rate-limit window. Fix: mirror the web node's catch → `FAILURE_APOLOGY` +
+  `route="failed"` + error entry; verified by unit fake and by a live turn (the throttle
+  window passed; normal path unregressed).
+- **BUG (fixed)**: one corrupt line in `turns.jsonl` (realistic: crash mid-write) made
+  `memagent analytics` dump a traceback instead of a report. Fix: per-line
+  `json.loads` with corrupt lines skipped + counted, `warning: skipped N corrupt
+  line(s)` on stderr. Verified: report renders over a file with 2 injected bad lines.
+- **PIPELINE EDGE (fixed)**: `analytics --json` on a missing log printed human prose to
+  stdout (exit 0) — breaking `| jq` consumers. Fix: guidance moved to stderr; `--json`
+  now always emits valid JSON (`aggregate([])` when empty). Verified.
+
+Also proven in the session: wipe → miss → verbatim HIT sim=0.74 with all 8 miss stages /
+5 hit stages in `latency_ms`; history genuinely flows into answer prompts (both answer
+nodes splice `state["history"]`); empty input re-prompts and `quit`/EOF exit cleanly;
+keyless `analytics` works; redis-down `chat` prints the same one-line error as `ask`
+(the M3 handlers are shared); redis-down `analytics` still renders; `CLASSIFY_TIMEOUT_S=0`
+→ answer normal + `analytics: null` record; unwritable `TURN_LOG_PATH` → turn answers,
+`log_turn_failed error=PermissionError` on stderr, no crash; empty log file renders a
+zero report. Lessons re-learned: grep on colored stderr must not include `=` after a key
+(ANSI codes split them), and piping chat through `head` SIGPIPE-kills the process
+mid-turn — capture to a file instead. `duckdb` is not installed locally, so the README
+one-liner's syntax is documented as not locally executed.
+
 ## 7. FR-M4-07 status (temperature probe) — ⏳ PENDING real key
 
 - Prices re-verified live 2026-07-05 on developers.openai.com/api/docs/pricing:
