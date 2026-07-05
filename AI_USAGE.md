@@ -33,7 +33,11 @@ Done sweep and this file's per-milestone append.
 | `Makefile`, `docker-compose.yml`, `.github/workflows/ci.yml` | AI-generated | shapes fixed by plan |
 | `scripts/verify_redisvl.py` | AI-generated | M1 verification duty; output recorded in the appendix |
 | `tests/unit/test_smoke.py` | AI-generated | scope deliberately bounded to smoke checks |
-| Module stubs (`state.py`, `web/`, `llm/`, …) | AI-generated | docstring-only; filled in M2–M5 |
+| `state.py`, `interfaces.py`, `resources.py`, `routers.py` | AI-generated, human-reviewed | canonical types + the 5 pure routers (M2) |
+| `memory/store.py`, `chunking.py`, `urls.py` | AI-generated, human-reviewed | single conversion site; 25 unit tests green first run (M2) |
+| `llm/clients.py`, `llm/prompts.py`, `nodes/`, `graph.py`, `app.py` | AI-generated, human-reviewed | thin clients (max_retries=0), hit-path graph, facade (M2) |
+| `scripts/seed_memory.py`, `docs/seed.md` | AI-generated | demo fixture + seeder (M2) |
+| Remaining stubs (`web/`, `security/`, `analytics/report`, `utils/`) | AI-generated | docstring-only; filled in M3–M5 |
 
 ## 4. Curated highlights (3-6 representative prompts)
 
@@ -51,9 +55,12 @@ Done sweep and this file's per-milestone append.
 
 ## 5. Complete prompt log (see docs/ai_prompts/)
 
-`docs/ai_prompts/milestone-1.md` — the chronological instruction record for Milestone 1,
-labelled as part of the complete instruction record. One file per milestone is appended as
-that milestone is built.
+One file per milestone, appended as that milestone is built — the chronological
+instruction record:
+
+- `docs/ai_prompts/milestone-1.md` — Milestone 1 (scaffold, toolchain, index schema)
+- `docs/ai_prompts/milestone-2.md` — Milestone 2 (memory path, threshold routing, live
+  GitHub Models verification records)
 
 ## 6. What was reviewed, tested, and corrected by hand
 
