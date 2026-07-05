@@ -81,6 +81,29 @@ break). Fix: `wipe_index` now also scans and deletes `doc:*` (schema.py; CLI cal
 unchanged). Verified live: post-wipe `doc:*` count is 0, and the demo transcript was
 recaptured from a genuinely clean slate.
 
+## 5a. Manual test session findings (user request: "test it like if i test it manually", 2026-07-05)
+
+A full hands-on session was run after the DoD closed. Two findings:
+
+- **BUG (fixed)**: `ask` with Redis down printed a 372-line typer pretty-traceback
+  (leaking turn locals) instead of the CLI's promised one-line readable error —
+  redisvl wraps the connection failure in `RedisSearchError`, which the `_REDIS_DOWN`
+  tuple didn't cover (M2 only ever live-tested redis-down on `wipe-memory`, which hits
+  redis directly). Fix: cause-chain walk in cli.py (`_redis_down_in_chain`) — verified:
+  one line, exit 1.
+- **CALIBRATION (documented, not a bug)**: a verbatim re-ask is NOT guaranteed to hit —
+  it hits iff the stored content scores ≥ 0.70 against the query. Measured live:
+  "How does Redis 8 vector search work?" → re-ask HIT at 0.74; "What is the trafilatura
+  Python library used for?" → re-ask MISS at top similarity 0.692 (re-searched; the
+  freshness gate correctly stored nothing — `fetched_at` unchanged). The
+  `SIMILARITY_THRESHOLD=0.65` lever flips the second case to `[MEMORY HIT sim=0.69]`.
+  The milestone source's "a verbatim re-ask hits" (§10) is topic-dependent in practice.
+
+Also proven in the session: blank `TAVILY_API_KEY` → `provider_used=ddgs`; bogus key →
+`tavily_failed error=HTTPStatusError` warning then ddgs (no retry); `FETCH_MAX_BYTES=1`
+→ all pages skipped → snippets-only degraded answer with the low-confidence disclaimer;
+missing `OPENAI_API_KEY` → readable guard line.
+
 ## 6. Live lifecycle result (the milestone's demoable outcome)
 
 `docs/demo_transcript.md` (captured 2026-07-05): turn 1 `[MEMORY MISS → searching the
