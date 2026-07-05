@@ -53,3 +53,12 @@ Additional live observations recorded for M2:
   traceback wall instead of the contracted one-line error (fixed; re-verified: readable
   line + exit 1 + clean recovery).
 - Design docs' "33 Settings fields" corrected to the true count of **32**.
+
+## Close-out (2026-07-05)
+
+- gh CLI 2.96.0 installed (release binary, no Homebrew); authenticated via user-provided PAT
+  after the interactive device flow could not run in a background shell.
+- T020 executed: `gh repo create memory-first-agent --public --source=. --push` →
+  https://github.com/muhammadyehiaelsayed/memory-first-agent
+- CI run 28736693997 (single zero-secret job: ruff → unit tests + coverage report):
+  **completed, conclusion=success** — SC-005 verified live, Milestone 1 Definition of Done met.
