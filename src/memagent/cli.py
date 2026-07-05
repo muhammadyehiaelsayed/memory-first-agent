@@ -68,11 +68,10 @@ def ask(query: str) -> None:
     if result.route == "memory_hit":
         typer.echo(f"[MEMORY HIT sim={result.similarity:.2f}]")
     else:
-        # Bare [MEMORY MISS] is temporary - M3 upgrades this banner to
-        # "[MEMORY MISS -> searching the web]" and prints web sources.
-        typer.echo("[MEMORY MISS]")
+        # The ONE canonical miss banner — M4's chat REPL reuses this exact string.
+        typer.echo("[MEMORY MISS → searching the web]")
     typer.echo(result.answer or "")
-    if result.route == "memory_hit" and result.sources:
+    if result.sources:
         typer.echo("")
         for src in result.sources:
             typer.echo(f"({src['origin']}) {src['title']} <{src['url']}>")

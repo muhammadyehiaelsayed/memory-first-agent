@@ -37,7 +37,13 @@ Done sweep and this file's per-milestone append.
 | `memory/store.py`, `chunking.py`, `urls.py` | AI-generated, human-reviewed | single conversion site; 25 unit tests green first run (M2) |
 | `llm/clients.py`, `llm/prompts.py`, `nodes/`, `graph.py`, `app.py` | AI-generated, human-reviewed | thin clients (max_retries=0), hit-path graph, facade (M2) |
 | `scripts/seed_memory.py`, `docs/seed.md` | AI-generated | demo fixture + seeder (M2) |
-| Remaining stubs (`web/`, `security/`, `analytics/report`, `utils/`) | AI-generated | docstring-only; filled in M3–M5 |
+| `web/search.py`, `web/fetch.py`, `web/to_markdown.py` | AI-generated, human-reviewed | raw-httpx Tavily + ddgs fallback, SSRF-guarded bounded fetch, markdown gating; field mappings live-verified (M3) |
+| `security/sanitizer.py` | AI-generated | pass-through seam; M5 swaps internals without touching call sites (M3) |
+| `nodes/search.py`, `nodes/fetch.py`, `nodes/ingest.py`, `answer_from_web` | AI-generated, human-reviewed | the real miss branch; ingest order is the T3 defence (M3) |
+| `graph.py` rewire, `app.py` real resources, `cli.py` miss banner | AI-generated | M2 temporary edge removed; canonical `[MEMORY MISS → searching the web]` (M3) |
+| `memory/schema.py` `wipe_index` doc-meta fix | AI-generated, hand-caught | live Redis inspection found stale `doc:*` metas would defeat the freshness gate after a wipe (see §6, M3) |
+| `tests/unit/test_to_markdown.py`, `docs/demo_transcript.md` | AI-generated | the one M3-owned test file (Ruling A) + captured live lifecycle (M3) |
+| Remaining stubs (`security/guardrails`, `analytics/report`, `utils/`) | AI-generated | docstring-only; filled in M4–M5 |
 
 ## 4. Curated highlights (3-6 representative prompts)
 
@@ -61,6 +67,9 @@ instruction record:
 - `docs/ai_prompts/milestone-1.md` — Milestone 1 (scaffold, toolchain, index schema)
 - `docs/ai_prompts/milestone-2.md` — Milestone 2 (memory path, threshold routing, live
   GitHub Models verification records)
+- `docs/ai_prompts/milestone-3.md` — Milestone 3 (web pipeline; Tavily/ddgs/trafilatura
+  verification records, analyze findings I1/I2/U1, the wipe-memory freshness-gate fix,
+  and the first live miss→ingest→hit transcript)
 
 ## 6. What was reviewed, tested, and corrected by hand
 
@@ -71,6 +80,11 @@ instruction record:
   separator); keys are still `chunk:<id>` and the `doc:*` meta prefix stays un-indexed — the
   double-colon trap the plan warned about is confirmed avoided.
 - Field-count truth-check: `Settings` has 32 fields (design docs briefly claimed 33; corrected).
+- M3 live inspection caught that `wipe-memory` left the non-indexed `doc:*` freshness
+  metas behind — harmless before M3, but it would have made the freshness gate silently
+  skip re-ingestion after a wipe. Fixed in `wipe_index` and re-verified (0 keys post-wipe).
+- M3's `/speckit-analyze` caught a Protocol-signature conflict (placeholder `PageFetcher`
+  vs the designed URL-list `fetch`) before any code was written — fixed in the task list.
 - Every Definition of Done command was executed for real (see milestone log), not assumed.
 
 ## 7. What was deliberately NOT AI-generated
