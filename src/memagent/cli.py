@@ -47,8 +47,41 @@ async def _wipe() -> None:
 
 @app.command()
 def ask(query: str) -> None:
-    """Answer a single question (wired in M2)."""
-    typer.echo(f"[stub] ask received: {query!r} - answering is wired in M2.")
+    """Answer a single question: memory first, web fallback (web path lands in M3)."""
+    settings = Settings()
+    if not settings.openai_api_key:
+        typer.echo(
+            "error: OPENAI_API_KEY is not set - add it to .env "
+            "(a GitHub Models PAT works for free development; see README).",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    try:
+        result = asyncio.run(_ask(query))
+    except _REDIS_DOWN as exc:
+        typer.echo(
+            f"error: cannot reach Redis at {settings.redis_url} - is it running? "
+            f"(make redis-up) [{exc.__class__.__name__}]",
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
+    if result.route == "memory_hit":
+        typer.echo(f"[MEMORY HIT sim={result.similarity:.2f}]")
+    else:
+        # Bare [MEMORY MISS] is temporary - M3 upgrades this banner to
+        # "[MEMORY MISS -> searching the web]" and prints web sources.
+        typer.echo("[MEMORY MISS]")
+    typer.echo(result.answer or "")
+    if result.route == "memory_hit" and result.sources:
+        typer.echo("")
+        for src in result.sources:
+            typer.echo(f"({src['origin']}) {src['title']} <{src['url']}>")
+
+
+async def _ask(query: str):
+    from memagent.app import Agent
+
+    return await Agent().answer(query)
 
 
 @app.command()

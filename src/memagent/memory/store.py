@@ -1,1 +1,144 @@
-"""redisvl store: KNN + upsert + similarity conversion (M2)."""
+"""Redis vector memory store.
+
+distance_to_similarity is THE one conversion site in the entire codebase
+(Constitution P-II): Redis COSINE returns distance d = 1 - cosine_similarity, and
+OpenAI embeddings are L2-normalized, so similarity is exactly 1 - d (never 1 - d/2).
+
+knn returns the RAW unfiltered top-k (threshold routing lives in routers only).
+Redis-down graceful degradation is M5's — the M2 demo assumes Redis is up.
+"""
+
+import hashlib
+import time
+from datetime import datetime, timezone
+
+from redisvl.query import VectorQuery
+from redisvl.redis.utils import array_to_buffer
+
+from memagent.config import Settings
+from memagent.memory.urls import url_hash
+from memagent.state import Chunk, FetchedDoc, MemoryHit
+
+_RETURN_FIELDS = [
+    "chunk_text", "url", "url_hash", "title", "doc_type",
+    "source_query", "chunk_index", "fetched_at", "sanitizer_flags", "content_sha256",
+]
+
+
+def distance_to_similarity(distance: float) -> float:
+    return 1.0 - distance
+
+
+def _epoch_to_iso(epoch: float) -> str:
+    return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
+
+
+class RedisMemoryStore:
+    """Implements the MemoryStore Protocol over M1's web_memory schema."""
+
+    def __init__(self, settings: Settings, client):
+        from memagent.memory.schema import get_index  # M1-owned module
+
+        self._settings = settings
+        self._redis = client
+        self._index = get_index(settings, client)
+
+    async def knn(self, vector: list[float], k: int) -> list[MemoryHit]:
+        query = VectorQuery(
+            vector=vector,
+            vector_field_name="embedding",
+            return_fields=_RETURN_FIELDS,
+            num_results=k,
+            dtype="float32",
+        )
+        results = await self._index.query(query)
+        hits: list[MemoryHit] = []
+        for r in results:
+            flags = (r.get("sanitizer_flags") or "").strip()
+            hits.append(
+                MemoryHit(
+                    doc_id=r.get("id", ""),
+                    text=r.get("chunk_text", ""),
+                    url=r.get("url", ""),
+                    title=r.get("title", ""),
+                    similarity=distance_to_similarity(float(r["vector_distance"])),
+                    stored_at=_epoch_to_iso(float(r.get("fetched_at", 0))),
+                    sanitizer_flags=flags.split(",") if flags else [],
+                    doc_type=r.get("doc_type", "chunk"),
+                )
+            )
+        hits.sort(key=lambda h: h["similarity"], reverse=True)
+        return hits
+
+    async def store(
+        self,
+        page: FetchedDoc,
+        chunks: list[Chunk],
+        vectors: list[list[float]],
+        source_query: str,
+        flags: list[str],
+    ) -> list[str]:
+        h = url_hash(page["url"])
+        meta_key = f"doc:{h}"
+        summary = page.get("summary")
+
+        expected = len(chunks) + (1 if summary is not None else 0)
+        if len(vectors) != expected:
+            raise ValueError(
+                f"vector alignment violated: got {len(vectors)} vectors for {len(chunks)} "
+                f"chunks (summary={'present' if summary is not None else 'absent'}); "
+                f"expected {expected} (specs/002 research D6)"
+            )
+
+        # Deterministic upsert: remove the previous generation without SCAN.
+        old = await self._redis.hgetall(meta_key)
+        if old:
+            old_n = int(old.get(b"num_chunks", b"0"))
+            stale = [f"chunk:{h}:{i}" for i in range(old_n)] + [f"chunk:{h}:summary"]
+            await self._redis.delete(*stale)
+
+        fetched_at = int(time.time())
+        ttl = self._settings.memory_ttl_seconds
+        flags_csv = ",".join(flags)
+        chunk_vectors = vectors[1:] if summary is not None else vectors
+        stored_ids: list[str] = []
+
+        async def _write(key: str, text: str, doc_type: str, chunk_index: int, vec: list[float]):
+            await self._redis.hset(
+                key,
+                mapping={
+                    "chunk_text": text,
+                    "url": page["url"],
+                    "url_hash": h,
+                    "title": page["title"],
+                    "doc_type": doc_type,
+                    "source_query": source_query,
+                    "chunk_index": chunk_index,
+                    "fetched_at": fetched_at,
+                    "sanitizer_flags": flags_csv,
+                    "content_sha256": hashlib.sha256(text.encode()).hexdigest(),
+                    "embedding": array_to_buffer(vec, dtype="float32"),
+                },
+            )
+            if ttl > 0:
+                await self._redis.expire(key, ttl)
+
+        if summary is not None:
+            await _write(f"chunk:{h}:summary", summary, "summary", -1, vectors[0])
+
+        for i, (chunk, vec) in enumerate(zip(chunks, chunk_vectors)):
+            key = f"chunk:{h}:{i}"
+            await _write(key, chunk["text"], "chunk", i, vec)
+            stored_ids.append(key)
+
+        await self._redis.hset(
+            meta_key,
+            mapping={"num_chunks": len(chunks), "fetched_at": fetched_at, "url": page["url"]},
+        )
+        return stored_ids
+
+    async def is_fresh(self, h: str) -> bool:
+        fetched_at = await self._redis.hget(f"doc:{h}", "fetched_at")
+        if fetched_at is None:
+            return False
+        return time.time() - float(fetched_at) < self._settings.freshness_window_seconds
