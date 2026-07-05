@@ -1,0 +1,24 @@
+# Environment & secrets
+.env
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+
+# Test & tooling caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# Runtime artifacts
+logs/
+
+# OS / editor noise
+.DS_Store
+.vscode/
+.idea/

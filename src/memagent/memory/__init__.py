@@ -1,0 +1,1 @@
+"""Redis vector memory layer."""

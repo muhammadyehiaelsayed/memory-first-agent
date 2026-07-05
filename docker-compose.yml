@@ -1,0 +1,24 @@
+services:
+  redis:
+    image: redis:8.2
+    container_name: memagent-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: memagent-redisinsight
+    ports:
+      - "5540:5540"
+    depends_on:
+      redis:
+        condition: service_healthy
+volumes:
+  redis-data:
