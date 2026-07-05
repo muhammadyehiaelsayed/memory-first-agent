@@ -68,8 +68,20 @@ async def ensure_index(index: AsyncSearchIndex) -> bool:
 
 
 async def wipe_index(index: AsyncSearchIndex) -> None:
-    """Drop the index AND its keys, then recreate empty (wipe-memory / dims-change recovery)."""
+    """Drop the index AND its keys, then recreate empty (wipe-memory / dims-change recovery).
+
+    Also deletes the NON-indexed doc:{url_hash} meta hashes: they carry the freshness
+    bookkeeping (fetched_at) and the upsert generation count (num_chunks). Leaving them
+    behind would make M3's freshness gate skip re-ingesting any URL seen < 24h before
+    the wipe — memory would silently stay empty for those URLs (found live, 2026-07-05).
+    """
     await index.create(overwrite=True, drop=True)
+    client = index.client
+    if client is None:
+        return
+    stale = [key async for key in client.scan_iter(match="doc:*", count=500)]
+    if stale:
+        await client.delete(*stale)
 
 
 def assert_index_dims(embedder_dim: int, settings: Settings) -> None:

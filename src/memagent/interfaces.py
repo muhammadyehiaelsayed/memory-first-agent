@@ -47,11 +47,14 @@ class MemoryStore(Protocol):
         flags: list[str],
     ) -> list[str]: ...
 
+    async def is_fresh(self, h: str) -> bool:  # h = url_hash(canonicalize(url)); 24h window
+        ...
+
 
 class PageFetcher(Protocol):
-    """Placeholder Protocol — M3 fleshes this out (bounded concurrent page fetching)."""
+    """Bounded concurrent page fetching; the fetch_pages node filters and passes plain URLs."""
 
-    async def fetch(self, results: list[SearchResult]) -> list[FetchedDoc]: ...
+    async def fetch(self, urls: list[str]) -> list[FetchedDoc]: ...
 
 
 class TurnLogger(Protocol):

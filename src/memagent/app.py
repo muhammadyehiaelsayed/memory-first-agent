@@ -13,6 +13,8 @@ from memagent.memory.schema import assert_index_dims
 from memagent.memory.store import RedisMemoryStore
 from memagent.resources import AgentResources
 from memagent.state import SourceRef
+from memagent.web.fetch import HttpxPageFetcher
+from memagent.web.search import FallbackProvider
 
 
 class TurnResult(NamedTuple):
@@ -20,20 +22,6 @@ class TurnResult(NamedTuple):
     answer: str | None
     sources: list[SourceRef]
     similarity: float | None
-
-
-class _NoopSearcher:
-    """Stub — replaced by M3's Tavily/ddgs FallbackProvider."""
-
-    async def search(self, query: str, k: int) -> list:  # noqa: ARG002
-        return []
-
-
-class _NoopFetcher:
-    """Stub — replaced by M3's bounded concurrent PageFetcher."""
-
-    async def fetch(self, results: list) -> list:  # noqa: ARG002
-        return []
 
 
 class _NoopTurnLogger:
@@ -54,8 +42,8 @@ def build_resources(settings: Settings | None = None) -> AgentResources:
         embedder=embedder,
         chat_llm=OpenAIChatLLM(settings, settings.conversation_model),
         analytics_llm=OpenAIChatLLM(settings, settings.analytics_model),
-        searcher=_NoopSearcher(),
-        fetcher=_NoopFetcher(),
+        searcher=FallbackProvider(settings),
+        fetcher=HttpxPageFetcher(settings),
         turn_logger=_NoopTurnLogger(),
     )
 

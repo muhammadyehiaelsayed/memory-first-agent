@@ -1,1 +1,98 @@
-"""Tavily via raw httpx + ddgs fallback (M3)."""
+"""Tavily via raw httpx + ddgs fallback (M3).
+
+TavilySearcher holds a reusable httpx.AsyncClient (never the vendor SDK package, which
+would be invisible to respx) so M5's retry tests can see every request. FallbackProvider fast-fails to keyless ddgs on ANY
+Tavily HTTP/transport error — the tenacity retry policy arrives with M5's
+reliability.py (Rulings A/D); adding retries here would double-own the concern
+(Constitution P-III). Clients rely on httpx default timeouts until M5 wraps them.
+"""
+
+import asyncio
+
+import httpx
+import structlog
+from ddgs import DDGS
+
+from memagent.config import Settings
+from memagent.state import SearchResult
+
+TAVILY_ENDPOINT = "https://api.tavily.com/search"
+
+logger = structlog.get_logger(__name__)
+
+
+class TavilySearcher:
+    """Raw httpx POST; snippet maps from the response 'content' field (specs/003 D1)."""
+
+    def __init__(self, settings: Settings):
+        self._settings = settings
+        self._client = httpx.AsyncClient(
+            headers={
+                "Authorization": f"Bearer {settings.tavily_api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+
+    async def search(self, query: str, k: int) -> list[SearchResult]:
+        response = await self._client.post(
+            TAVILY_ENDPOINT,
+            json={"query": query, "max_results": k, "include_raw_content": False},
+        )
+        response.raise_for_status()
+        results = response.json().get("results", [])
+        return [
+            SearchResult(
+                url=r.get("url", ""), title=r.get("title", ""),
+                snippet=r.get("content", ""), rank=i,
+            )
+            for i, r in enumerate(results[:k])
+        ]
+
+
+class DdgsSearcher:
+    """Keyless DuckDuckGo; ddgs is synchronous so it runs via asyncio.to_thread."""
+
+    async def search(self, query: str, k: int) -> list[SearchResult]:
+        rows = await asyncio.to_thread(
+            lambda: list(DDGS().text(query, max_results=k))
+        )
+        return [
+            SearchResult(
+                url=r.get("href", ""), title=r.get("title", ""),
+                snippet=r.get("body", ""), rank=i,
+            )
+            for i, r in enumerate(rows[:k])
+        ]
+
+
+class FallbackProvider:
+    """Implements WebSearcher: Tavily first (iff key present), ddgs on any failure.
+
+    provider_used is turn bookkeeping read by the web_search node (specs/003 D6) —
+    the WebSearcher Protocol signature stays untouched.
+    """
+
+    def __init__(self, settings: Settings):
+        self._settings = settings
+        self._tavily = TavilySearcher(settings)
+        self._ddgs = DdgsSearcher()
+        self.provider_used: str | None = None
+
+    async def search(self, query: str, k: int) -> list[SearchResult]:
+        if self._settings.tavily_api_key:
+            try:
+                results = await self._tavily.search(query, k)
+                self.provider_used = "tavily"
+                logger.info("web_search", provider_used="tavily", results=len(results))
+                return results
+            except (httpx.HTTPStatusError, httpx.TransportError) as exc:
+                logger.warning("tavily_failed", error=type(exc).__name__)
+        try:
+            results = await self._ddgs.search(query, k)
+            self.provider_used = "ddgs"
+            logger.info("web_search", provider_used="ddgs", results=len(results))
+            return results
+        except Exception as exc:  # noqa: BLE001 — ddgs is scrape-based; [] routes to answer_failure
+            logger.warning("ddgs_failed", error=type(exc).__name__)
+            self.provider_used = None
+            return []

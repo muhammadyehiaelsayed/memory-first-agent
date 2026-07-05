@@ -1,20 +1,31 @@
 """One compiled async StateGraph (Rulings B + F).
 
-M2 wires the hit path. TEMPORARY seams (comment-marked):
+M2 wired the hit path; M3 wired the real miss branch (web_search -> fetch_pages ->
+ingest_content -> answer_from_web). REMAINING TEMPORARY seams (comment-marked):
 - entry is embed_query (guard_input activates in M5 — Ruling F)
-- route_after_memory's "web_search" key maps to answer_failure (M3 remaps to the real
-  web_search node — this path-map line is the whole miss-branch seam)
 - log_turn is a no-op stub (M4 replaces)
 """
 
 from langgraph.graph import END, StateGraph
 
-from memagent.nodes.answer import make_answer_failure, make_answer_from_memory
+from memagent.nodes.answer import (
+    make_answer_failure,
+    make_answer_from_memory,
+    make_answer_from_web,
+)
 from memagent.nodes.embed import make_embed_query
+from memagent.nodes.fetch import make_fetch_pages
+from memagent.nodes.ingest import make_ingest_content
 from memagent.nodes.log import make_log_turn
 from memagent.nodes.memory import make_memory_search
+from memagent.nodes.search import make_web_search
 from memagent.resources import AgentResources
-from memagent.routers import route_after_embed, route_after_memory
+from memagent.routers import (
+    route_after_embed,
+    route_after_fetch,
+    route_after_memory,
+    route_after_search,
+)
 from memagent.state import AgentState
 
 
@@ -23,6 +34,10 @@ def build_graph(resources: AgentResources):
     sg.add_node("embed_query", make_embed_query(resources))
     sg.add_node("memory_search", make_memory_search(resources))
     sg.add_node("answer_from_memory", make_answer_from_memory(resources))
+    sg.add_node("web_search", make_web_search(resources))
+    sg.add_node("fetch_pages", make_fetch_pages(resources))
+    sg.add_node("ingest_content", make_ingest_content(resources))
+    sg.add_node("answer_from_web", make_answer_from_web(resources))
     sg.add_node("answer_failure", make_answer_failure(resources))
     sg.add_node("log_turn", make_log_turn(resources))  # no-op stub (M4 replaces)
 
@@ -35,12 +50,21 @@ def build_graph(resources: AgentResources):
     sg.add_conditional_edges(
         "memory_search",
         route_after_memory,
-        {
-            "answer_from_memory": "answer_from_memory",
-            "web_search": "answer_failure",  # TEMPORARY miss->failure (M3 remaps this key)
-        },
+        {"answer_from_memory": "answer_from_memory", "web_search": "web_search"},
     )
+    sg.add_conditional_edges(
+        "web_search",
+        route_after_search,
+        {"fetch_pages": "fetch_pages", "answer_failure": "answer_failure"},
+    )
+    sg.add_conditional_edges(
+        "fetch_pages",
+        route_after_fetch,
+        {"ingest_content": "ingest_content", "answer_from_web": "answer_from_web"},
+    )
+    sg.add_edge("ingest_content", "answer_from_web")
     sg.add_edge("answer_from_memory", "log_turn")
+    sg.add_edge("answer_from_web", "log_turn")
     sg.add_edge("answer_failure", "log_turn")
     sg.add_edge("log_turn", END)
     return sg.compile()
