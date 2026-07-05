@@ -9,7 +9,6 @@ store failure is caught; skip_store and the 24h freshness gate skip persistence 
 while chunking always runs so the in-hand answer keeps its context (specs/003 I2).
 """
 
-import time
 
 from memagent.memory.chunking import chunk_markdown
 from memagent.memory.urls import canonicalize, url_hash
@@ -27,7 +26,6 @@ SUMMARY_SYSTEM = (
 
 def make_ingest_content(resources: AgentResources):
     async def ingest_content(state: dict) -> dict:
-        started = time.perf_counter()
         settings = resources.settings
         enriched_docs: list[FetchedDoc] = []
         all_chunks: list[Chunk] = []
@@ -104,7 +102,6 @@ def make_ingest_content(resources: AgentResources):
             "fetched_docs": enriched_docs,
             "chunks": all_chunks,
             "stored_chunk_ids": stored_ids,
-            "latency_ms": {"ingest_content": int((time.perf_counter() - started) * 1000)},
         }
         if errors:
             update["errors"] = errors

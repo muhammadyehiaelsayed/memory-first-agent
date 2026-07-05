@@ -58,6 +58,6 @@ class PageFetcher(Protocol):
 
 
 class TurnLogger(Protocol):
-    """Placeholder Protocol — M4 fleshes this out (one TurnRecord per turn to JSONL)."""
+    """One TurnRecord JSON line appended per turn (analytics/turnlog.py, M4)."""
 
     def log(self, record: dict) -> None: ...

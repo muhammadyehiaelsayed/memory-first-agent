@@ -1,9 +1,9 @@
 """One compiled async StateGraph (Rulings B + F).
 
 M2 wired the hit path; M3 wired the real miss branch (web_search -> fetch_pages ->
-ingest_content -> answer_from_web). REMAINING TEMPORARY seams (comment-marked):
+ingest_content -> answer_from_web); M4 wired the real log_turn (TurnRecord JSONL) and
+per-stage timed() instrumentation. REMAINING TEMPORARY seam (comment-marked):
 - entry is embed_query (guard_input activates in M5 — Ruling F)
-- log_turn is a no-op stub (M4 replaces)
 """
 
 from langgraph.graph import END, StateGraph
@@ -27,19 +27,22 @@ from memagent.routers import (
     route_after_search,
 )
 from memagent.state import AgentState
+from memagent.utils.timing import timed
 
 
 def build_graph(resources: AgentResources):
     sg = StateGraph(AgentState)
-    sg.add_node("embed_query", make_embed_query(resources))
-    sg.add_node("memory_search", make_memory_search(resources))
-    sg.add_node("answer_from_memory", make_answer_from_memory(resources))
-    sg.add_node("web_search", make_web_search(resources))
-    sg.add_node("fetch_pages", make_fetch_pages(resources))
-    sg.add_node("ingest_content", make_ingest_content(resources))
-    sg.add_node("answer_from_web", make_answer_from_web(resources))
-    sg.add_node("answer_failure", make_answer_failure(resources))
-    sg.add_node("log_turn", make_log_turn(resources))  # no-op stub (M4 replaces)
+    # timed() is the single stage-latency owner (PLAN section 8.2 stage names);
+    # log_turn stays unwrapped — it measures classify/total itself, pre-write.
+    sg.add_node("embed_query", timed("embed", make_embed_query(resources)))
+    sg.add_node("memory_search", timed("vector_search", make_memory_search(resources)))
+    sg.add_node("answer_from_memory", timed("answer_llm", make_answer_from_memory(resources)))
+    sg.add_node("web_search", timed("web_search", make_web_search(resources)))
+    sg.add_node("fetch_pages", timed("fetch", make_fetch_pages(resources)))
+    sg.add_node("ingest_content", timed("ingest", make_ingest_content(resources)))
+    sg.add_node("answer_from_web", timed("answer_llm", make_answer_from_web(resources)))
+    sg.add_node("answer_failure", timed("answer_failure", make_answer_failure(resources)))
+    sg.add_node("log_turn", make_log_turn(resources))
 
     sg.set_entry_point("embed_query")  # guard_input activates in M5 (Ruling F)
     sg.add_conditional_edges(

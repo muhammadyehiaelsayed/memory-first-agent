@@ -43,7 +43,12 @@ Done sweep and this file's per-milestone append.
 | `graph.py` rewire, `app.py` real resources, `cli.py` miss banner | AI-generated | M2 temporary edge removed; canonical `[MEMORY MISS → searching the web]` (M3) |
 | `memory/schema.py` `wipe_index` doc-meta fix | AI-generated, hand-caught | live Redis inspection found stale `doc:*` metas would defeat the freshness gate after a wipe (see §6, M3) |
 | `tests/unit/test_to_markdown.py`, `docs/demo_transcript.md` | AI-generated | the one M3-owned test file (Ruling A) + captured live lifecycle (M3) |
-| Remaining stubs (`security/guardrails`, `analytics/report`, `utils/`) | AI-generated | docstring-only; filled in M4–M5 |
+| `llm/clients.py` finalized + `build_openai_clients` | AI-generated, human-reviewed | ONE shared AsyncOpenAI, `_call`/`_parse_call` retry seams, pinned params; scripted FR assertions (M4) |
+| `analytics/classify.py` hardening, `analytics/turnlog.py`, `nodes/log.py` real node | AI-generated, human-reviewed | `_missing_→other`, null-tolerant 8s/×2 classifier; one TurnRecord JSONL line per turn incl. blocked; never raises (M4) |
+| `analytics/report.py`, `logs/turns.sample.jsonl`, `cli.py` analytics | AI-generated | aggregate + rich tables, `--json`, markup-escape on user strings; 10-record sample (M4) |
+| `cli.py` chat REPL, `app.py` `configure_logging`/`new_turn_state`, `utils/timing.py`, `graph.py` timed() wiring | AI-generated, human-reviewed | streaming banners, 6-turn history cap, stderr-only structlog with turn_id, single-owner stage latency (M4) |
+| `tests/unit/test_classifier_parsing.py`, `tests/unit/test_turnlog.py`, `MODEL_CHOICES.md` port | AI-generated | the two M4-owned test files (tests-first); prices re-verified 2026-07-05 on the official page (M4) |
+| Remaining stubs (`security/guardrails`, `utils/reliability.py`, `utils/errors.py`) | AI-generated | docstring-only; filled in M5 |
 
 ## 4. Curated highlights (3-6 representative prompts)
 
@@ -70,6 +75,10 @@ instruction record:
 - `docs/ai_prompts/milestone-3.md` — Milestone 3 (web pipeline; Tavily/ddgs/trafilatura
   verification records, analyze findings I1/I2/U1, the wipe-memory freshness-gate fix,
   and the first live miss→ingest→hit transcript)
+- `docs/ai_prompts/milestone-4.md` — Milestone 4 (turn log, classifier, analytics CLI,
+  REPL, finalized clients; PAT/pricing/probe verification records, analyze findings, the
+  ISO-language and latency-single-owner fixes, and the pending pinned-model temperature
+  probe status)
 
 ## 6. What was reviewed, tested, and corrected by hand
 
@@ -85,6 +94,13 @@ instruction record:
   skip re-ingestion after a wipe. Fixed in `wipe_index` and re-verified (0 keys post-wipe).
 - M3's `/speckit-analyze` caught a Protocol-signature conflict (placeholder `PageFetcher`
   vs the designed URL-list `fetch`) before any code was written — fixed in the task list.
+- M4's plan-phase repo probe found two source-spec work items already shipped (usage-returning
+  `complete()`, answer-node token capture) and the log stub under a different filename —
+  preventing duplicate/conflicting tasks; M4's `/speckit-analyze` then caught that three M3
+  nodes self-measured latency (the planned `timed()` wrapper would have clobbered/drifted the
+  keys) and that the `logs/` directory ignore made the tracked sample log impossible.
+- M4's first live classified turn returned `language: "English"` instead of the ISO code —
+  fixed with a schema field description and re-verified live (`"en"`).
 - Every Definition of Done command was executed for real (see milestone log), not assumed.
 
 ## 7. What was deliberately NOT AI-generated
