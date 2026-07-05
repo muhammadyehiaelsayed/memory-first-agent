@@ -8,11 +8,15 @@ import asyncio
 
 import redis.asyncio as aioredis
 import typer
+from redis import exceptions as redis_exceptions
 
 from memagent.config import Settings
 from memagent.memory.schema import get_index, wipe_index
 
 app = typer.Typer(add_completion=False, help="Memory-first web agent")
+
+# redis-py's ConnectionError/TimeoutError do NOT subclass the builtins.
+_REDIS_DOWN = (redis_exceptions.ConnectionError, redis_exceptions.TimeoutError, OSError)
 
 
 @app.command("wipe-memory")
@@ -20,7 +24,7 @@ def wipe_memory() -> None:
     """Drop and recreate the Redis vector index (also the dims-change recovery path)."""
     try:
         asyncio.run(_wipe())
-    except (ConnectionError, OSError) as exc:
+    except _REDIS_DOWN as exc:
         settings = Settings()
         typer.echo(
             f"error: cannot reach Redis at {settings.redis_url} - is it running? "

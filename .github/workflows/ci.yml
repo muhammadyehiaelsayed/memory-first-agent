@@ -1,0 +1,18 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Install dependencies
+        run: uv sync
+      - name: Lint
+        run: uv run ruff check .
+      - name: Unit tests (coverage report, no gate)
+        run: uv run pytest -m "not integration and not e2e" --cov=memagent --cov-report=term
