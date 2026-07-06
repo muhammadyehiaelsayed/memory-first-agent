@@ -39,7 +39,6 @@ from memagent.utils.errors import (
 logger = logging.getLogger("memagent.reliability")
 
 _LLM_RETRYABLE = (RateLimitError, APITimeoutError, APIConnectionError, InternalServerError)
-_LLM_FAST_FAIL_STATUS = {400, 401, 403, 404, 422}
 
 
 def _max_wait(cap_s: float, settings: Settings) -> float:

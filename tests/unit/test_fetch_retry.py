@@ -78,6 +78,21 @@ def test_non_html_content_type_skipped():
 
 
 @respx.mock
+def test_redirect_stores_final_resolved_url():
+    # FR-M3-13: with follow_redirects=True the stored identity is the POST-redirect URL, so
+    # freshness/dedup key off where the content actually lives (not the original request URL).
+    respx.get("https://start.com/").mock(
+        return_value=httpx.Response(301, headers={"location": "https://final.com/page"})
+    )
+    respx.get("https://final.com/page").mock(
+        return_value=httpx.Response(200, headers=HTML, content=_page("Final"))
+    )
+    fetcher = HttpxPageFetcher(SETTINGS)
+    doc = _run(fetcher._fetch_one("https://start.com/"))
+    assert doc and doc["url"] == "https://final.com/page"
+
+
+@respx.mock
 def test_one_failed_url_does_not_stop_the_others():
     respx.get("https://a.com/").mock(
         return_value=httpx.Response(200, headers=HTML, content=_page("A"))

@@ -20,6 +20,19 @@ def test_chunk_size_and_overlap_bounds():
     assert all(len(c) <= SETTINGS.chunk_size_chars for c in chunks)
 
 
+def test_overlap_duplicates_boundary_content_between_chunks():
+    # A long space-separated run forces multi-chunk splitting: overlap=200 makes the tail of a
+    # chunk reappear at the head of the next; overlap=0 does not. (The size-bound test above holds
+    # identically with overlap=0, so it never actually exercised the overlap invariant.)
+    big = "token000 " + " ".join(f"token{i:03d}" for i in range(1, 900))
+    overlapped = chunk_markdown(big, SETTINGS)
+    none = chunk_markdown(big, Settings(chunk_overlap_chars=0))
+    assert len(overlapped) >= 2
+    assert overlapped[0][-60:] in overlapped[1]  # overlap present with the 200-char setting
+    assert none[0][-60:] not in none[1]  # ... and absent when overlap is 0
+    assert sum(len(c) for c in overlapped) > sum(len(c) for c in none)  # overlap duplicates text
+
+
 def test_chunks_below_floor_are_dropped():
     chunks = chunk_markdown("short.", SETTINGS)
     assert chunks == []
@@ -44,9 +57,14 @@ def test_unicode_survives():
     assert any("معلومات" in c for c in chunks)
 
 
-def test_short_document_yields_at_most_one_chunk():
-    text = "A single meaningful paragraph about Redis vector search internals, long enough to keep."
-    assert len(chunk_markdown(text, SETTINGS)) <= 1
+def test_short_document_yields_exactly_one_chunk_equal_to_input():
+    # >= the 100-char floor but < chunk_size: a valid short doc must survive as ONE chunk equal
+    # to its input. (The prior 87-char input fell below the floor -> [] -> a vacuous `<= 1`.)
+    text = (
+        "A single meaningful paragraph about Redis vector search internals, kept whole "
+        "because it exceeds the hundred character floor."
+    )
+    assert chunk_markdown(text, SETTINGS) == [text]
 
 
 @pytest.mark.parametrize(
