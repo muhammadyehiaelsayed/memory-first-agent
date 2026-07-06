@@ -64,7 +64,9 @@ def make_ingest_content(resources: AgentResources):
                         }
                     )
 
-            doc_out: FetchedDoc = {**doc, "summary": summary}
+            # Carry the sanitizer flags onto the output doc so answer_from_web can put them
+            # in the L2 provenance header (D10 producer root; sanitize() call above is FROZEN).
+            doc_out: FetchedDoc = {**doc, "summary": summary, "sanitizer_flags": flags}
             enriched_docs.append(doc_out)
 
             # Chunking ALWAYS runs — fresh/skip_store pages still feed the in-hand answer.

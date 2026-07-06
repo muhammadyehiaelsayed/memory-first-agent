@@ -12,12 +12,44 @@ import hashlib
 import time
 from datetime import datetime, timezone
 
+import redis.asyncio as aioredis
+from redis import exceptions as redis_exceptions
+from redis.asyncio.retry import Retry
+from redis.backoff import ExponentialBackoff
+from redisvl.exceptions import RedisSearchError
 from redisvl.query import VectorQuery
 from redisvl.redis.utils import array_to_buffer
 
 from memagent.config import Settings
 from memagent.memory.urls import url_hash
 from memagent.state import Chunk, FetchedDoc, MemoryHit
+from memagent.utils.errors import MemoryUnavailableError, redis_down_in_chain
+
+
+def make_redis_client(settings: Settings):
+    """Async redis client with native Retry (3 retries = 4 total tries; ~1s cap; 2s socket).
+
+    ConnectionError/TimeoutError retry; ResponseError (a programming bug) is NOT retried and
+    surfaces loudly. Used by app.build_resources and cli._wipe (one construction site).
+    """
+    return aioredis.from_url(
+        settings.redis_url,
+        retry=Retry(ExponentialBackoff(cap=1.0), 3),
+        retry_on_error=[redis_exceptions.ConnectionError, redis_exceptions.TimeoutError],
+        socket_timeout=2.0,
+        socket_connect_timeout=2.0,
+    )
+
+
+def _as_memory_error(exc: BaseException) -> MemoryUnavailableError | None:
+    """Return a MemoryUnavailableError if exc is a (possibly redisvl-wrapped) redis outage."""
+    if isinstance(exc, MemoryUnavailableError):
+        return exc
+    if isinstance(exc, RedisSearchError) and redis_down_in_chain(exc):
+        return MemoryUnavailableError(str(exc))
+    if redis_down_in_chain(exc):
+        return MemoryUnavailableError(str(exc))
+    return None
 
 _RETURN_FIELDS = [
     "chunk_text", "url", "url_hash", "title", "doc_type",
@@ -43,6 +75,18 @@ class RedisMemoryStore:
         self._redis = client
         self._index = get_index(settings, client)
 
+    async def _io(self, coro):
+        """Await a redis coroutine, translating a (possibly wrapped) outage to the typed error.
+
+        ResponseError and other programming bugs are NOT translated — they surface loudly.
+        """
+        try:
+            return await coro
+        except Exception as exc:  # noqa: BLE001
+            if err := _as_memory_error(exc):
+                raise err from exc
+            raise
+
     async def knn(self, vector: list[float], k: int) -> list[MemoryHit]:
         query = VectorQuery(
             vector=vector,
@@ -51,7 +95,12 @@ class RedisMemoryStore:
             num_results=k,
             dtype="float32",
         )
-        results = await self._index.query(query)
+        try:
+            results = await self._index.query(query)
+        except Exception as exc:  # noqa: BLE001 — translate redis outage; ResponseError re-raised
+            if err := _as_memory_error(exc):
+                raise err from exc
+            raise
         hits: list[MemoryHit] = []
         for r in results:
             flags = (r.get("sanitizer_flags") or "").strip()
@@ -91,11 +140,11 @@ class RedisMemoryStore:
             )
 
         # Deterministic upsert: remove the previous generation without SCAN.
-        old = await self._redis.hgetall(meta_key)
+        old = await self._io(self._redis.hgetall(meta_key))
         if old:
             old_n = int(old.get(b"num_chunks", b"0"))
             stale = [f"chunk:{h}:{i}" for i in range(old_n)] + [f"chunk:{h}:summary"]
-            await self._redis.delete(*stale)
+            await self._io(self._redis.delete(*stale))
 
         fetched_at = int(time.time())
         ttl = self._settings.memory_ttl_seconds
@@ -104,7 +153,7 @@ class RedisMemoryStore:
         stored_ids: list[str] = []
 
         async def _write(key: str, text: str, doc_type: str, chunk_index: int, vec: list[float]):
-            await self._redis.hset(
+            await self._io(self._redis.hset(
                 key,
                 mapping={
                     "chunk_text": text,
@@ -119,9 +168,9 @@ class RedisMemoryStore:
                     "content_sha256": hashlib.sha256(text.encode()).hexdigest(),
                     "embedding": array_to_buffer(vec, dtype="float32"),
                 },
-            )
+            ))
             if ttl > 0:
-                await self._redis.expire(key, ttl)
+                await self._io(self._redis.expire(key, ttl))
 
         if summary is not None:
             await _write(f"chunk:{h}:summary", summary, "summary", -1, vectors[0])
@@ -131,14 +180,14 @@ class RedisMemoryStore:
             await _write(key, chunk["text"], "chunk", i, vec)
             stored_ids.append(key)
 
-        await self._redis.hset(
+        await self._io(self._redis.hset(
             meta_key,
             mapping={"num_chunks": len(chunks), "fetched_at": fetched_at, "url": page["url"]},
-        )
+        ))
         return stored_ids
 
     async def is_fresh(self, h: str) -> bool:
-        fetched_at = await self._redis.hget(f"doc:{h}", "fetched_at")
+        fetched_at = await self._io(self._redis.hget(f"doc:{h}", "fetched_at"))
         if fetched_at is None:
             return False
         return time.time() - float(fetched_at) < self._settings.freshness_window_seconds

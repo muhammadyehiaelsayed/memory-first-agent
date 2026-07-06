@@ -6,7 +6,6 @@ import time
 from typing import NamedTuple
 from uuid import uuid4
 
-import redis.asyncio as aioredis
 import structlog
 
 from memagent.analytics.turnlog import TurnLogger
@@ -14,7 +13,7 @@ from memagent.config import Settings
 from memagent.graph import build_graph
 from memagent.llm.clients import build_openai_clients
 from memagent.memory.schema import assert_index_dims
-from memagent.memory.store import RedisMemoryStore
+from memagent.memory.store import RedisMemoryStore, make_redis_client
 from memagent.resources import AgentResources
 from memagent.state import SourceRef
 from memagent.web.fetch import HttpxPageFetcher
@@ -26,6 +25,7 @@ class TurnResult(NamedTuple):
     answer: str | None
     sources: list[SourceRef]
     similarity: float | None
+    degradation: str | None = None
 
 
 def configure_logging(settings: Settings) -> None:
@@ -82,7 +82,7 @@ def build_resources(settings: Settings | None = None) -> AgentResources:
     settings = settings if settings is not None else Settings()
     chat_llm, analytics_llm, embedder = build_openai_clients(settings)  # ONE shared transport
     assert_index_dims(embedder.dim, settings)
-    client = aioredis.from_url(settings.redis_url)
+    client = make_redis_client(settings)  # M5: native Retry (3) + 2s socket timeouts
     return AgentResources(
         settings=settings,
         memory=RedisMemoryStore(settings, client),
@@ -113,4 +113,5 @@ class Agent:
             answer=final.get("answer"),
             sources=final.get("sources", []),
             similarity=final.get("top_similarity"),
+            degradation=final.get("degradation"),
         )

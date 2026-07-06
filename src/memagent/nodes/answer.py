@@ -1,7 +1,10 @@
 """answer_from_memory, answer_from_web, and answer_failure nodes."""
 
+import re
+
 from memagent.llm.prompts import build_system_prompt, wrap_context
 from memagent.resources import AgentResources
+from memagent.security.sanitizer import strip_markdown_images
 from memagent.state import SourceRef
 
 FAILURE_APOLOGY = (
@@ -50,8 +53,8 @@ def make_answer_from_memory(resources: AgentResources):
                 ],
             }
         sources = _dedupe_sources(hits, "memory")
-        answer = result.text
-        if "sources:" not in answer.lower():
+        answer = strip_markdown_images(result.text)  # T4 output defence (FR-M5-29)
+        if not re.search(r"(?im)^\s*sources\s*:", answer):  # real header, not "resources:"
             listing = "\n".join(f"- {s['url']}" for s in sources)
             answer = f"{answer}\n\nSources:\n{listing}"
         return {
@@ -83,16 +86,28 @@ def make_answer_from_web(resources: AgentResources):
                 if not parts:
                     continue
                 source_dicts.append(
-                    {"url": doc["url"], "title": doc["title"], "text": "\n\n".join(parts)}
+                    {
+                        "url": doc["url"],
+                        "title": doc["title"],
+                        "text": "\n\n".join(parts),
+                        # D10: carry per-page sanitizer flags into the L2 provenance header.
+                        "sanitizer_flags": doc.get("sanitizer_flags", []),
+                    }
                 )
-            route, degradation, disclaimer = "memory_miss_web_search", None, None
+            # D9: a lingering redis_down (from memory_search) makes even a clean fetched
+            # answer a degraded_web turn (FR-M5-24); otherwise it's a normal miss.
+            degradation = state.get("degradation")
+            route = "degraded_web" if degradation else "memory_miss_web_search"
+            disclaimer = None
         else:
             # Snippets-only degraded path: search succeeded but nothing was fetchable.
             source_dicts = [
                 {"url": r["url"], "title": r["title"], "text": r["snippet"]}
                 for r in state["search_results"]
             ]
-            route, degradation, disclaimer = "degraded_web", "snippets_only", LOW_CONFIDENCE_DISCLAIMER
+            # redis_down (if present) is the first cause and keeps the label; disclaimer still shows.
+            degradation = state.get("degradation") or "snippets_only"
+            route, disclaimer = "degraded_web", LOW_CONFIDENCE_DISCLAIMER
 
         # In-hand content only — no memory.knn, no Redis reads on the miss path.
         context = wrap_context(source_dicts, origin="web")
@@ -116,8 +131,8 @@ def make_answer_from_web(resources: AgentResources):
                 ],
             }
         sources = _dedupe_sources(source_dicts, "web")
-        answer = result.text
-        if "sources:" not in answer.lower():
+        answer = strip_markdown_images(result.text)  # T4 output defence (FR-M5-29)
+        if not re.search(r"(?im)^\s*sources\s*:", answer):  # real header, not "resources:"
             listing = "\n".join(f"- {s['url']}" for s in sources)
             answer = f"{answer}\n\nSources:\n{listing}"
         if disclaimer:
