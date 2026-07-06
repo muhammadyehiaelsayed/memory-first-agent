@@ -19,7 +19,7 @@ class Embedder(Protocol):
 
 class CompletionResult(NamedTuple):
     text: str
-    usage: dict          # {"input_tokens": int, "output_tokens": int, "model": str}
+    usage: dict  # {"input_tokens": int, "output_tokens": int, "model": str}
 
 
 class ChatLLM(Protocol):

@@ -43,7 +43,9 @@ def test_auth_error_fast_fails_and_fallback_uses_ddgs(monkeypatch):
     async def fake_ddgs(self, query, k):
         return [{"url": "d", "title": "ddgs", "snippet": "s", "rank": 0}]
 
-    monkeypatch.setattr(DdgsSearcher, "search", fake_ddgs)  # stub the primp leg (respx can't see it)
+    monkeypatch.setattr(
+        DdgsSearcher, "search", fake_ddgs
+    )  # stub the primp leg (respx can't see it)
     provider = FallbackProvider(SETTINGS)
     results = _run(provider.search("redis", 5))
     assert route.call_count == 1  # 401 not retried

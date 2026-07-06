@@ -22,7 +22,11 @@ def make_memory_search(resources: AgentResources):
                 "skip_store": True,
                 "degradation": "redis_down",
                 "errors": [
-                    {"node": "memory_search", "error_type": type(exc).__name__, "detail": str(exc)[:200]}
+                    {
+                        "node": "memory_search",
+                        "error_type": type(exc).__name__,
+                        "detail": str(exc)[:200],
+                    }
                 ],
             }
         return {

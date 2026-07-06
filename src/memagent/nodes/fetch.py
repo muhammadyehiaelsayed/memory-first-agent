@@ -7,9 +7,7 @@ from memagent.web.fetch import filter_urls
 def make_fetch_pages(resources: AgentResources):
     async def fetch_pages(state: dict) -> dict:
         try:
-            urls = filter_urls(
-                [r["url"] for r in state["search_results"]], resources.settings
-            )
+            urls = filter_urls([r["url"] for r in state["search_results"]], resources.settings)
             docs = await resources.fetcher.fetch(urls[: resources.settings.fetch_top_n])
             update: dict = {"fetched_docs": docs}
         except Exception as exc:  # noqa: BLE001 — empty docs degrade to the snippets-only answer

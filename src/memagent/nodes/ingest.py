@@ -9,7 +9,6 @@ store failure is caught; skip_store and the 24h freshness gate skip persistence 
 while chunking always runs so the in-hand answer keeps its context (specs/003 I2).
 """
 
-
 from memagent.memory.chunking import chunk_markdown
 from memagent.memory.urls import canonicalize, url_hash
 from memagent.resources import AgentResources
@@ -73,8 +72,11 @@ def make_ingest_content(resources: AgentResources):
             chunk_texts = chunk_markdown(clean, settings)
             chunks = [
                 Chunk(
-                    chunk_id=f"{h}:{i}", text=t, url=doc["url"],
-                    title=doc["title"], chunk_index=i,
+                    chunk_id=f"{h}:{i}",
+                    text=t,
+                    url=doc["url"],
+                    title=doc["title"],
+                    chunk_index=i,
                 )
                 for i, t in enumerate(chunk_texts)
             ]
@@ -87,8 +89,11 @@ def make_ingest_content(resources: AgentResources):
                 texts = ([summary] if summary is not None else []) + chunk_texts
                 vectors = await resources.embedder.embed(texts)
                 stored = await resources.memory.store(
-                    page=doc_out, chunks=chunks, vectors=vectors,
-                    source_query=state["query"], flags=flags,
+                    page=doc_out,
+                    chunks=chunks,
+                    vectors=vectors,
+                    source_query=state["query"],
+                    flags=flags,
                 )
                 stored_ids.extend(stored)
             except Exception as exc:  # noqa: BLE001 — answering never depends on persistence

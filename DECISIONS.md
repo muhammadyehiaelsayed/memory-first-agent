@@ -1,7 +1,8 @@
-# Design Decisions (scaffold — finalized in M6)
+# Design Decisions (finalized in M6)
 
-Key technology rulings for this repo, seeded at M1. The full decision log with
-alternatives-considered lands in M6; the standing rulings below are binding from day one.
+Key technology rulings for this repo, seeded at M1 and finalized at M6 (2026-07-06). The
+standing rulings below are binding from day one; the anti-churn list was re-verified against
+the M2–M6 specs and remains the complete cut-scope record cited by every milestone's plan.
 
 ## Locked at M1
 
