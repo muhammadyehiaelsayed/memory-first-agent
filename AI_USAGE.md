@@ -128,6 +128,15 @@ instruction record:
   context-anchored patterns; a line-anchored Sources header check) and regression-guarded;
   two other reported findings were correctly refuted (an inherent regex recall gap, and a
   CommonMark-correct image strip). See milestone-5.md §7.
+- A second M5 manual session (2026-07-06) inspected the ACTUAL Redis-stored chunks after a
+  real ingestion and caught two dual-use false positives the workflow's synthetic fixtures
+  missed: `role_hijack` neutralised "switch to developer mode" (a real product feature) and
+  bare "jailbreak" on a benign Chromium security doc, corrupting the stored text and flagging
+  the page. Both fixed (dropped `developer mode` and standalone `jailbreak` from the pattern;
+  real attacks still caught via the framing-gated `jailbroken`/`dan`/`do-anything-now`
+  tokens) and regression-guarded; re-ingestion then stored 0 marked/flagged chunks. See
+  milestone-5.md §8. Lesson: a shared L1-query/L3-content registry must be tuned against real
+  fetched prose, and verified by inspecting stored chunks — not just the answer text.
 - Every Definition of Done command was executed for real (see milestone log), not assumed.
 
 ## 7. What was deliberately NOT AI-generated
