@@ -115,8 +115,13 @@ def fake_llm_qc():
 
 
 # ---- redis_url: skip integration/e2e if Redis is unreachable (FR-004) -------
-@pytest.fixture
-def redis_url(settings):
+def probe_redis_or_skip(settings) -> str:
+    """Return settings.redis_url iff Redis is reachable; else pytest.skip (never error).
+
+    Extracted from the redis_url fixture so FR-004's skip-not-error contract is unit-testable
+    (test_m6_fixtures.py exercises THIS function), rather than asserted only by an inline
+    socket-probe tautology that never touched the fixture code.
+    """
     parsed = urlparse(settings.redis_url)
     host, port = parsed.hostname or "localhost", parsed.port or 6379
     try:
@@ -125,6 +130,11 @@ def redis_url(settings):
     except OSError:
         pytest.skip(f"Redis not reachable at {host}:{port} — skipping integration/e2e")
     return settings.redis_url
+
+
+@pytest.fixture
+def redis_url(settings):
+    return probe_redis_or_skip(settings)
 
 
 # ---- clean_index: drop + recreate the empty web_memory index (FR-005) -------

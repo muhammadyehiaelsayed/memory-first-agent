@@ -8,16 +8,20 @@ upstream unit files (Ruling A).
 
 import asyncio
 import math
-import socket
+import pathlib
+import sys
 import time
-from urllib.parse import urlparse
 
 import httpx
+import pytest
 from openai import APIConnectionError
 
 from memagent.analytics.classify import QueryClassification
 from memagent.config import Settings
 from memagent.utils.reliability import llm_retry
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))  # repo root on path
+from tests.conftest import probe_redis_or_skip  # noqa: E402  (recheck H shim; tests/ not a package)
 
 REQ = httpx.Request("POST", "https://api.openai.com/v1/x")
 
@@ -81,14 +85,10 @@ def test_fake_embedder_query_dominated_high_disjoint_low(fake_embedder):
 
 
 # ---- FR-004: redis_url skips (never errors) when Redis is unreachable ----
-def test_redis_url_skip_trigger_is_oserror():
-    # The redis_url fixture pytest.skip()s exactly when this socket probe raises OSError.
-    s = Settings(_env_file=None, redis_url="redis://127.0.0.1:6390/0")  # dead port
-    parsed = urlparse(s.redis_url)
-    raised = False
-    try:
-        with socket.create_connection((parsed.hostname, parsed.port), timeout=0.5):
-            pass
-    except OSError:
-        raised = True
-    assert raised  # -> the fixture reports `skipped`, not `error`
+def test_probe_redis_or_skip_skips_on_dead_port():
+    # Exercises the ACTUAL fixture helper (conftest.probe_redis_or_skip): an unreachable Redis
+    # must raise Skipped (pytest.skip), so integration/e2e report `skipped`, never `error`.
+    # (Previously a tautology that rebuilt the socket probe inline and never ran the fixture.)
+    dead = Settings(_env_file=None, redis_url="redis://127.0.0.1:6390/0")  # dead port
+    with pytest.raises(pytest.skip.Exception):
+        probe_redis_or_skip(dead)

@@ -103,3 +103,32 @@ async def test_distance_to_similarity_exact(clean_index, settings):
     assert abs(orthogonal[0]["similarity"] - 0.0) <= 1e-6
     assert abs(cos07[0]["similarity"] - 0.70) <= 1e-6
     assert cos07[0]["similarity"] >= settings.similarity_threshold - 1e-6  # inclusive hit at 0.70
+
+
+# ---- FR-M3-24: the 24h freshness gate boundary (is_fresh) is exclusive (`<`) ----
+async def test_is_fresh_boundary(clean_index, fake_embedder, settings, monkeypatch):
+    import memagent.memory.store as store_mod
+    from memagent.memory.urls import url_hash
+
+    t0 = 1751625600.0
+    monkeypatch.setattr(store_mod.time, "time", lambda: t0)  # pin the store clock at write time
+    store = RedisMemoryStore(settings, clean_index.client)
+    page = _page(url="https://redis.io/fresh", title="Fresh")
+    chunk = _chunk("freshness body", page["url"], page["title"])
+    await store.store(
+        page=page,
+        chunks=[chunk],
+        vectors=await fake_embedder.embed(["freshness body"]),
+        source_query="q",
+        flags=[],
+    )
+    h = url_hash(page["url"])  # store writes doc:{url_hash(page["url"])}
+    window = settings.freshness_window_seconds
+
+    monkeypatch.setattr(store_mod.time, "time", lambda: t0 + window - 1)
+    assert await store.is_fresh(h) is True  # 1s inside the 24h window
+    monkeypatch.setattr(store_mod.time, "time", lambda: t0 + window)
+    assert await store.is_fresh(h) is False  # exactly at the window: exclusive boundary
+    monkeypatch.setattr(store_mod.time, "time", lambda: t0 + window + 100)
+    assert await store.is_fresh(h) is False  # well past the window
+    assert await store.is_fresh("deadbeefdeadbeef") is False  # unknown url -> not fresh
