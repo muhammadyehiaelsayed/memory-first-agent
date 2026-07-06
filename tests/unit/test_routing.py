@@ -14,9 +14,9 @@ from memagent.routers import (
 @pytest.mark.parametrize(
     ("top_similarity", "expected"),
     [
-        (0.70, "answer_from_memory"),   # exactly at threshold -> hit (INCLUSIVE)
-        (0.6999, "web_search"),         # just below -> miss
-        (None, "web_search"),           # empty index -> miss, never an error
+        (0.70, "answer_from_memory"),  # exactly at threshold -> hit (INCLUSIVE)
+        (0.6999, "web_search"),  # just below -> miss
+        (None, "web_search"),  # empty index -> miss, never an error
         (1.0, "answer_from_memory"),
         (0.0, "web_search"),
     ],

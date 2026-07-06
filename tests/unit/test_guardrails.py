@@ -17,7 +17,13 @@ from memagent.security.guardrails import screen_input
 from memagent.security.patterns import PATTERN_REGISTRY, Severity, max_severity
 
 SETTINGS = Settings(_env_file=None)
-CLF = {"topic": "t", "category": "other", "question_type": "other", "language": "en", "confidence": 0.5}
+CLF = {
+    "topic": "t",
+    "category": "other",
+    "question_type": "other",
+    "language": "en",
+    "confidence": 0.5,
+}
 USAGE = {"input_tokens": 1, "output_tokens": 1, "model": "fake"}
 
 
@@ -50,7 +56,13 @@ class FakeSearcher:
 class FakeFetcher:
     async def fetch(self, urls):
         return [
-            {"url": u, "title": "A", "markdown": "# A\n\nRedis vector search uses cosine.", "summary": None, "ok": True}
+            {
+                "url": u,
+                "title": "A",
+                "markdown": "# A\n\nRedis vector search uses cosine.",
+                "summary": None,
+                "ok": True,
+            }
             for u in urls
         ]
 
@@ -144,7 +156,13 @@ def test_max_severity_ranks_by_explicit_order():
 
 def test_registry_covers_five_categories():
     names = {p.name for p in PATTERN_REGISTRY}
-    assert names == {"instruction_override", "prompt_leak", "role_hijack", "fake_role_markers", "exfil_coaxing"}
+    assert names == {
+        "instruction_override",
+        "prompt_leak",
+        "role_hijack",
+        "fake_role_markers",
+        "exfil_coaxing",
+    }
     import re
 
     for p in PATTERN_REGISTRY:
@@ -246,7 +264,11 @@ def test_memory_hit_header_reattaches_stored_flags():
 
 
 def test_web_source_with_flags_renders_them():  # [A] populated-web-flags
-    src = {"url": "https://ex.com/a", "text": "body", "sanitizer_flags": ["neutralized_instruction"]}
+    src = {
+        "url": "https://ex.com/a",
+        "text": "body",
+        "sanitizer_flags": ["neutralized_instruction"],
+    }
     wrapped = wrap_context([src], origin="web")
     assert "origin: web" in wrapped
     assert "sanitizer_flags: neutralized_instruction" in wrapped
@@ -279,14 +301,26 @@ class RecordingChatLLM:
 
 def test_question_is_last_and_system_has_no_chunk_text():
     rec = RecordingChatLLM()
-    res = build_fake_resources(memory=FakeMemory(hits=[
-        {"doc_id": "d", "text": "SECRET_CHUNK_TOKEN about redis", "url": "https://ex.com/p",
-         "title": "P", "similarity": 0.8, "stored_at": "2026-07-01T00:00:00+00:00",
-         "sanitizer_flags": [], "doc_type": "chunk"}
-    ]))
+    res = build_fake_resources(
+        memory=FakeMemory(
+            hits=[
+                {
+                    "doc_id": "d",
+                    "text": "SECRET_CHUNK_TOKEN about redis",
+                    "url": "https://ex.com/p",
+                    "title": "P",
+                    "similarity": 0.8,
+                    "stored_at": "2026-07-01T00:00:00+00:00",
+                    "sanitizer_flags": [],
+                    "doc_type": "chunk",
+                }
+            ]
+        )
+    )
     res = res._replace(chat_llm=rec) if hasattr(res, "_replace") else res
     # AgentResources is a frozen dataclass; rebuild with the recording LLM
     from dataclasses import replace
+
     res = replace(res, chat_llm=rec)
     node = make_answer_from_memory(res)
     state = {"memory_hits": res.memory.hits, "query": "How does redis work?", "history": []}
@@ -297,18 +331,49 @@ def test_question_is_last_and_system_has_no_chunk_text():
 
 
 def _t4_state_memory():
-    return {"memory_hits": [{"doc_id": "d", "text": "x", "url": "https://ex.com/p", "title": "P",
-                             "similarity": 0.8, "stored_at": "", "sanitizer_flags": [], "doc_type": "chunk"}],
-            "query": "q", "history": []}
+    return {
+        "memory_hits": [
+            {
+                "doc_id": "d",
+                "text": "x",
+                "url": "https://ex.com/p",
+                "title": "P",
+                "similarity": 0.8,
+                "stored_at": "",
+                "sanitizer_flags": [],
+                "doc_type": "chunk",
+            }
+        ],
+        "query": "q",
+        "history": [],
+    }
 
 
 def _t4_state_web():
-    return {"fetched_docs": [{"url": "https://ex.com/a", "title": "A", "markdown": "m",
-                              "summary": "s", "ok": True, "sanitizer_flags": []}],
-            "chunks": [{"chunk_id": "a:0", "text": "chunk text", "url": "https://ex.com/a",
-                        "title": "A", "chunk_index": 0}],
-            "search_results": [{"url": "https://ex.com/a", "title": "A", "snippet": "s", "rank": 0}],
-            "query": "q", "history": []}
+    return {
+        "fetched_docs": [
+            {
+                "url": "https://ex.com/a",
+                "title": "A",
+                "markdown": "m",
+                "summary": "s",
+                "ok": True,
+                "sanitizer_flags": [],
+            }
+        ],
+        "chunks": [
+            {
+                "chunk_id": "a:0",
+                "text": "chunk text",
+                "url": "https://ex.com/a",
+                "title": "A",
+                "chunk_index": 0,
+            }
+        ],
+        "search_results": [{"url": "https://ex.com/a", "title": "A", "snippet": "s", "rank": 0}],
+        "query": "q",
+        "history": [],
+    }
 
 
 class ImageEmittingLLM:
@@ -321,6 +386,7 @@ class ImageEmittingLLM:
 
 def test_answer_nodes_strip_markdown_images():  # T4 / FR-M5-29
     from dataclasses import replace
+
     res = replace(build_fake_resources(), chat_llm=ImageEmittingLLM())
     mem_out = asyncio.run(make_answer_from_memory(res)(_t4_state_memory()))
     web_out = asyncio.run(make_answer_from_web(res)(_t4_state_web()))
@@ -355,6 +421,7 @@ class ResourcesWordLLM:
 
 def test_sources_footer_fires_despite_resources_word():  # "resources:" must not suppress footer
     from dataclasses import replace
+
     res = replace(build_fake_resources(), chat_llm=ResourcesWordLLM())
     out = asyncio.run(make_answer_from_memory(res)(_t4_state_memory()))
     assert re.search(r"(?im)^\s*sources\s*:", out["answer"])  # footer appended

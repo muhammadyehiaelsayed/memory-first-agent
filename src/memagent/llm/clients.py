@@ -15,7 +15,7 @@ from memagent.interfaces import CompletionResult
 from memagent.utils.reliability import llm_retry
 
 CONVERSATION_MAX_TOKENS = 2048  # code constants, not env vars (PLAN section 6)
-ANALYTICS_MAX_TOKENS = 256      # also caps M3's per-page summaries (5-8 sentences fit)
+ANALYTICS_MAX_TOKENS = 256  # also caps M3's per-page summaries (5-8 sentences fit)
 
 
 class OpenAIEmbedder:
@@ -36,7 +36,11 @@ class OpenAIEmbedder:
 
 class OpenAIChatLLM:
     def __init__(
-        self, client: AsyncOpenAI, model: str, max_tokens: int, temperature: float | None = 0.0,
+        self,
+        client: AsyncOpenAI,
+        model: str,
+        max_tokens: int,
+        temperature: float | None = 0.0,
         retrying=None,
     ):
         self._client = client
@@ -61,11 +65,11 @@ class OpenAIChatLLM:
             max_tokens=self._max_tokens,
             **({"temperature": self._temperature} if self._temperature is not None else {}),
         )
-        return CompletionResult(
-            text=resp.choices[0].message.content or "", usage=self._usage(resp)
-        )
+        return CompletionResult(text=resp.choices[0].message.content or "", usage=self._usage(resp))
 
-    async def parse(self, system: str, user: str, schema: type[BaseModel]) -> tuple[BaseModel, dict]:
+    async def parse(
+        self, system: str, user: str, schema: type[BaseModel]
+    ) -> tuple[BaseModel, dict]:
         resp = await self._parse_call(
             model=self._model,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
@@ -97,7 +101,10 @@ def build_openai_clients(settings: Settings) -> tuple[OpenAIChatLLM, OpenAIChatL
     )
     retrying = llm_retry(settings)
     conversation = OpenAIChatLLM(
-        client, settings.conversation_model, CONVERSATION_MAX_TOKENS, temperature=0.0,
+        client,
+        settings.conversation_model,
+        CONVERSATION_MAX_TOKENS,
+        temperature=0.0,
         retrying=retrying,
     )
     # Analytics client is deliberately NOT wrapped (D3): classify.py owns its own

@@ -14,7 +14,7 @@ from enum import Enum
 
 
 class Severity(str, Enum):
-    HIGH = "high"      # -> block
+    HIGH = "high"  # -> block
     MEDIUM = "medium"  # -> flag + skip_store
 
 
@@ -56,7 +56,9 @@ PATTERN_REGISTRY: list[Pattern] = [
     Pattern(
         "prompt_leak",
         Severity.HIGH,
-        _c(r"\b(reveal|show|print|repeat|display|expose|leak|give me|tell me)\b[\s\S]{0,40}\b(system|initial|original|developer)\b[\s\S]{0,15}(prompt|instruction|message|rules)"),
+        _c(
+            r"\b(reveal|show|print|repeat|display|expose|leak|give me|tell me)\b[\s\S]{0,40}\b(system|initial|original|developer)\b[\s\S]{0,15}(prompt|instruction|message|rules)"
+        ),
     ),
     Pattern(
         "role_hijack",
@@ -90,6 +92,8 @@ PATTERN_REGISTRY: list[Pattern] = [
     Pattern(
         "exfil_coaxing",
         Severity.MEDIUM,
-        _c(r"\b(?:e-?mail|send|forward|upload|post|exfiltrate|transmit)\b[\s\S]{0,40}(?:https?://|[\w.+-]+@[\w-]+\.\w+)"),
+        _c(
+            r"\b(?:e-?mail|send|forward|upload|post|exfiltrate|transmit)\b[\s\S]{0,40}(?:https?://|[\w.+-]+@[\w-]+\.\w+)"
+        ),
     ),
 ]

@@ -21,8 +21,8 @@ ZERO_WIDTH = dict.fromkeys(map(ord, "​‌‍﻿"), None)
 @dataclass(frozen=True)
 class GuardResult:
     verdict: Literal["allow", "flag", "block"]
-    sanitized_query: str        # NFKC-normalised, zero-width-stripped, length-capped
-    events: list[str]           # matched pattern names + "length_capped" (+ "fail_open" set by the node)
+    sanitized_query: str  # NFKC-normalised, zero-width-stripped, length-capped
+    events: list[str]  # matched pattern names + "length_capped" (+ "fail_open" set by the node)
 
 
 def screen_input(query: str, settings: Settings) -> GuardResult:

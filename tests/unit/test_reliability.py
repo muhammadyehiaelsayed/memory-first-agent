@@ -29,7 +29,13 @@ from memagent.utils.reliability import llm_retry
 SETTINGS0 = Settings(_env_file=None, wait_cap_scale=0.0)
 REQ = httpx.Request("POST", "https://api.openai.com/v1/x")
 USAGE = {"input_tokens": 1, "output_tokens": 1, "model": "fake"}
-CLF = {"topic": "t", "category": "other", "question_type": "other", "language": "en", "confidence": 0.5}
+CLF = {
+    "topic": "t",
+    "category": "other",
+    "question_type": "other",
+    "language": "en",
+    "confidence": 0.5,
+}
 
 
 # ============================ OpenAI retry policy ============================
@@ -40,10 +46,7 @@ def test_async_openai_built_with_max_retries_zero():
 
 def test_no_node_module_imports_tenacity():
     nodes_dir = pathlib.Path("src/memagent/nodes")
-    offenders = [
-        p.name for p in nodes_dir.glob("*.py")
-        if "tenacity" in p.read_text()
-    ]
+    offenders = [p.name for p in nodes_dir.glob("*.py") if "tenacity" in p.read_text()]
     assert offenders == [], offenders
 
 
@@ -105,7 +108,9 @@ def test_down_redis_raises_memory_unavailable():
     chunks = [{"chunk_id": "x:0", "text": "t", "url": page["url"], "title": "P", "chunk_index": 0}]
     raised = False
     try:
-        asyncio.run(store.store(page=page, chunks=chunks, vectors=[[0.1] * 4], source_query="q", flags=[]))
+        asyncio.run(
+            store.store(page=page, chunks=chunks, vectors=[[0.1] * 4], source_query="q", flags=[])
+        )
     except MemoryUnavailableError:
         raised = True
     assert raised
@@ -150,7 +155,11 @@ class FakeSearcher:
     async def search(self, query, k):
         if self.fail:
             raise SearchUnavailableError("search down")
-        return [] if self.empty else [{"url": "https://ex.com/a", "title": "A", "snippet": "s", "rank": 0}]
+        return (
+            []
+            if self.empty
+            else [{"url": "https://ex.com/a", "title": "A", "snippet": "s", "rank": 0}]
+        )
 
 
 class FakeFetcher:
@@ -160,7 +169,16 @@ class FakeFetcher:
     async def fetch(self, urls):
         if self.empty:
             return []
-        return [{"url": u, "title": "A", "markdown": "# A\n\nRedis vector search.", "summary": None, "ok": True} for u in urls]
+        return [
+            {
+                "url": u,
+                "title": "A",
+                "markdown": "# A\n\nRedis vector search.",
+                "summary": None,
+                "ok": True,
+            }
+            for u in urls
+        ]
 
 
 class FakeMemory:
@@ -192,9 +210,14 @@ class FakeLogger:
 
 def resources(**kw):
     defaults = dict(
-        settings=SETTINGS0, memory=FakeMemory(), embedder=FakeEmbedder(),
-        chat_llm=FakeChat(), analytics_llm=FakeChat(), searcher=FakeSearcher(),
-        fetcher=FakeFetcher(), turn_logger=FakeLogger(),
+        settings=SETTINGS0,
+        memory=FakeMemory(),
+        embedder=FakeEmbedder(),
+        chat_llm=FakeChat(),
+        analytics_llm=FakeChat(),
+        searcher=FakeSearcher(),
+        fetcher=FakeFetcher(),
+        turn_logger=FakeLogger(),
     )
     defaults.update(kw)
     return AgentResources(**defaults)
@@ -204,8 +227,18 @@ def run(res, query="How does Redis vector search work?"):
     return asyncio.run(Agent(resources=res).answer(query))
 
 
-HIT = [{"doc_id": "d", "text": "Redis uses cosine.", "url": "https://ex.com/p", "title": "P",
-        "similarity": 0.8, "stored_at": "2026-07-01T00:00:00+00:00", "sanitizer_flags": [], "doc_type": "chunk"}]
+HIT = [
+    {
+        "doc_id": "d",
+        "text": "Redis uses cosine.",
+        "url": "https://ex.com/p",
+        "title": "P",
+        "similarity": 0.8,
+        "stored_at": "2026-07-01T00:00:00+00:00",
+        "sanitizer_flags": [],
+        "doc_type": "chunk",
+    }
+]
 
 
 def test_redis_down_degrades_to_web_only():

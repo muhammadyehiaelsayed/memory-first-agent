@@ -51,9 +51,18 @@ def _as_memory_error(exc: BaseException) -> MemoryUnavailableError | None:
         return MemoryUnavailableError(str(exc))
     return None
 
+
 _RETURN_FIELDS = [
-    "chunk_text", "url", "url_hash", "title", "doc_type",
-    "source_query", "chunk_index", "fetched_at", "sanitizer_flags", "content_sha256",
+    "chunk_text",
+    "url",
+    "url_hash",
+    "title",
+    "doc_type",
+    "source_query",
+    "chunk_index",
+    "fetched_at",
+    "sanitizer_flags",
+    "content_sha256",
 ]
 
 
@@ -153,22 +162,24 @@ class RedisMemoryStore:
         stored_ids: list[str] = []
 
         async def _write(key: str, text: str, doc_type: str, chunk_index: int, vec: list[float]):
-            await self._io(self._redis.hset(
-                key,
-                mapping={
-                    "chunk_text": text,
-                    "url": page["url"],
-                    "url_hash": h,
-                    "title": page["title"],
-                    "doc_type": doc_type,
-                    "source_query": source_query,
-                    "chunk_index": chunk_index,
-                    "fetched_at": fetched_at,
-                    "sanitizer_flags": flags_csv,
-                    "content_sha256": hashlib.sha256(text.encode()).hexdigest(),
-                    "embedding": array_to_buffer(vec, dtype="float32"),
-                },
-            ))
+            await self._io(
+                self._redis.hset(
+                    key,
+                    mapping={
+                        "chunk_text": text,
+                        "url": page["url"],
+                        "url_hash": h,
+                        "title": page["title"],
+                        "doc_type": doc_type,
+                        "source_query": source_query,
+                        "chunk_index": chunk_index,
+                        "fetched_at": fetched_at,
+                        "sanitizer_flags": flags_csv,
+                        "content_sha256": hashlib.sha256(text.encode()).hexdigest(),
+                        "embedding": array_to_buffer(vec, dtype="float32"),
+                    },
+                )
+            )
             if ttl > 0:
                 await self._io(self._redis.expire(key, ttl))
 
@@ -180,10 +191,12 @@ class RedisMemoryStore:
             await _write(key, chunk["text"], "chunk", i, vec)
             stored_ids.append(key)
 
-        await self._io(self._redis.hset(
-            meta_key,
-            mapping={"num_chunks": len(chunks), "fetched_at": fetched_at, "url": page["url"]},
-        ))
+        await self._io(
+            self._redis.hset(
+                meta_key,
+                mapping={"num_chunks": len(chunks), "fetched_at": fetched_at, "url": page["url"]},
+            )
+        )
         return stored_ids
 
     async def is_fresh(self, h: str) -> bool:

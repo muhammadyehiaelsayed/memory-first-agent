@@ -14,14 +14,30 @@ from memagent.config import Settings
 from memagent.nodes.log import make_log_turn
 
 RECORD_KEYS = {
-    "turn_id", "ts", "session_id", "query", "query_sha256", "route", "degradation",
-    "similarity_top", "similarity_threshold", "web", "sources", "latency_ms", "tokens",
-    "guardrail", "errors", "analytics",
+    "turn_id",
+    "ts",
+    "session_id",
+    "query",
+    "query_sha256",
+    "route",
+    "degradation",
+    "similarity_top",
+    "similarity_threshold",
+    "web",
+    "sources",
+    "latency_ms",
+    "tokens",
+    "guardrail",
+    "errors",
+    "analytics",
 }
 
 VALID_CLF = QueryClassification(
-    topic="redis vector search", category="technology", question_type="how_to",
-    language="en", confidence=0.9,
+    topic="redis vector search",
+    category="technology",
+    question_type="how_to",
+    language="en",
+    confidence=0.9,
 )
 NANO_USAGE = {"input_tokens": 198, "output_tokens": 36, "model": "gpt-5.4-nano"}
 
@@ -110,7 +126,12 @@ def test_web_route_builds_web_block():
         chunks=[{"chunk_id": "c", "text": "x", "url": "u", "title": "t", "chunk_index": 0}] * 14,
     )
     web = build_turn_record(state, Settings())["web"]
-    assert web == {"provider": "tavily", "results_returned": 5, "pages_fetched": 3, "chunks_ingested": 14}
+    assert web == {
+        "provider": "tavily",
+        "results_returned": 5,
+        "pages_fetched": 3,
+        "chunks_ingested": 14,
+    }
 
 
 def test_blocked_turn_is_still_logged(tmp_path):
@@ -135,7 +156,9 @@ def test_real_log_turn_writes_full_record(tmp_path):
     log_turn = make_log_turn(Resources(logger))
     state = make_state(
         "memory_miss_web_search",
-        tokens={"answer_llm": {"model": "gpt-5.4-mini", "input_tokens": 2311, "output_tokens": 402}},
+        tokens={
+            "answer_llm": {"model": "gpt-5.4-mini", "input_tokens": 2311, "output_tokens": 402}
+        },
         latency_ms={"embed": 42, "answer_llm": 1420},
         turn_started_at=time.perf_counter(),
         search_provider="ddgs",
@@ -146,7 +169,11 @@ def test_real_log_turn_writes_full_record(tmp_path):
     assert "classify" in record["latency_ms"]
     assert record["latency_ms"]["embed"] == 42  # reduced dicts merged, not clobbered
     assert record["tokens"]["answer_llm"] == {"model": "gpt-5.4-mini", "input": 2311, "output": 402}
-    assert record["tokens"]["analytics_llm"] == {"model": "gpt-5.4-nano", "input": 198, "output": 36}
+    assert record["tokens"]["analytics_llm"] == {
+        "model": "gpt-5.4-nano",
+        "input": 198,
+        "output": 36,
+    }
     assert record["analytics"]["topic"] == "redis vector search"
     # the node's own updates feed the graph reducers too
     assert updates["analytics"] is VALID_CLF

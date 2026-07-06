@@ -20,9 +20,9 @@ class Settings(BaseSettings):
     )
 
     # --- keys (all optional so keyless test/lint/wipe run) ---
-    openai_api_key: str = ""            # the ONE required key at runtime (LLMs + embeddings)
+    openai_api_key: str = ""  # the ONE required key at runtime (LLMs + embeddings)
     openai_base_url: str | None = None  # optional -> GitHub Models free dev mode
-    tavily_api_key: str = ""            # optional -> keyless ddgs fallback
+    tavily_api_key: str = ""  # optional -> keyless ddgs fallback
 
     # --- models ---
     conversation_model: str = "gpt-5.4-mini"
@@ -33,9 +33,9 @@ class Settings(BaseSettings):
     # --- redis / memory ---
     redis_url: str = "redis://localhost:6379/0"
     memory_index_name: str = "web_memory"
-    similarity_threshold: float = 0.7   # inclusive: hit <=> (1 - distance) >= this
+    similarity_threshold: float = 0.7  # inclusive: hit <=> (1 - distance) >= this
     memory_top_k: int = 5
-    memory_ttl_seconds: int = 604800    # 7 days; 0 disables
+    memory_ttl_seconds: int = 604800  # 7 days; 0 disables
     freshness_window_seconds: int = 86400
 
     # --- web ---
@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     history_max_turns: int = 6
 
     # --- reliability / guard / logging ---
-    wait_cap_scale: float = 1.0         # tests set 0 -> instant retries via prod path
+    wait_cap_scale: float = 1.0  # tests set 0 -> instant retries via prod path
     guard_max_query_chars: int = 2000
     log_level: str = "INFO"
     turn_log_path: str = "logs/turns.jsonl"

@@ -50,11 +50,11 @@ class Category(str, Enum):
 
 
 class QueryClassification(BaseModel):
-    topic: str            # free-form, 1-4 lowercase words ("redis vector search")
-    category: Category    # closed enum
+    topic: str  # free-form, 1-4 lowercase words ("redis vector search")
+    category: Category  # closed enum
     question_type: QuestionType
     language: str = Field(description="ISO 639-1 two-letter code, e.g. 'en'")  # ISO 639-1
-    confidence: float     # 0..1
+    confidence: float  # 0..1
 
 
 def _classify_user(query: str) -> str:
@@ -68,7 +68,9 @@ async def classify(
 
     @retry(stop=stop_after_attempt(2), reraise=True)
     async def _once() -> tuple[QueryClassification, dict]:
-        return await analytics_llm.parse(CLASSIFY_SYSTEM, _classify_user(query), QueryClassification)
+        return await analytics_llm.parse(
+            CLASSIFY_SYSTEM, _classify_user(query), QueryClassification
+        )
 
     try:
         obj, usage = await asyncio.wait_for(_once(), timeout=timeout_s)

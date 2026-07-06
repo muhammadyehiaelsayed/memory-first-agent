@@ -11,8 +11,11 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 def canonicalize(url: str) -> str:
     parts = urlsplit(url.strip())
     query = urlencode(
-        [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
-         if not k.lower().startswith("utm_")]
+        [
+            (k, v)
+            for k, v in parse_qsl(parts.query, keep_blank_values=True)
+            if not k.lower().startswith("utm_")
+        ]
     )
     return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path, query, ""))
 

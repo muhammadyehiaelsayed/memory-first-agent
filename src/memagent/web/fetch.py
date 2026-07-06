@@ -22,8 +22,13 @@ from memagent.web.to_markdown import to_markdown
 ALLOWED_SCHEMES = {"http", "https"}
 ACCEPTED_CONTENT_TYPES = ("text/html", "application/xhtml+xml", "text/plain")
 JS_ONLY_DENYLIST = {
-    "youtube.com", "youtu.be", "x.com", "twitter.com",
-    "facebook.com", "instagram.com", "tiktok.com",
+    "youtube.com",
+    "youtu.be",
+    "x.com",
+    "twitter.com",
+    "facebook.com",
+    "instagram.com",
+    "tiktok.com",
 }
 USER_AGENT = "memagent/1.0 (+https://github.com/muhammadyehiaelsayed/memory-first-agent)"
 MAX_URLS_PER_DOMAIN = 2
@@ -47,8 +52,7 @@ def _is_private_host(host: str) -> bool:
         # Hostname (not an IP literal): best-effort DNS resolution is M5 hardening.
         return False
     return (
-        ip.is_private or ip.is_loopback or ip.is_link_local
-        or ip.is_reserved or ip.is_unspecified
+        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_unspecified
     )
 
 
@@ -107,9 +111,7 @@ class HttpxPageFetcher:
     async def _fetch_guarded(self, url: str) -> FetchedDoc | None:
         try:
             async with self._semaphore:
-                return await asyncio.wait_for(
-                    self._fetch_one(url), self._settings.page_deadline_s
-                )
+                return await asyncio.wait_for(self._fetch_one(url), self._settings.page_deadline_s)
         except Exception as exc:  # noqa: BLE001 — per-URL failures are skipped; others continue
             logger.warning("fetch_skipped", url=url, error=type(exc).__name__)
             return None

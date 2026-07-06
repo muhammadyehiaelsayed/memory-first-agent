@@ -51,8 +51,10 @@ class TavilySearcher:
         results = response.json().get("results", [])
         return [
             SearchResult(
-                url=r.get("url", ""), title=r.get("title", ""),
-                snippet=r.get("content", ""), rank=i,
+                url=r.get("url", ""),
+                title=r.get("title", ""),
+                snippet=r.get("content", ""),
+                rank=i,
             )
             for i, r in enumerate(results[:k])
         ]
@@ -62,13 +64,13 @@ class DdgsSearcher:
     """Keyless DuckDuckGo; ddgs is synchronous so it runs via asyncio.to_thread."""
 
     async def search(self, query: str, k: int) -> list[SearchResult]:
-        rows = await asyncio.to_thread(
-            lambda: list(DDGS().text(query, max_results=k))
-        )
+        rows = await asyncio.to_thread(lambda: list(DDGS().text(query, max_results=k)))
         return [
             SearchResult(
-                url=r.get("href", ""), title=r.get("title", ""),
-                snippet=r.get("body", ""), rank=i,
+                url=r.get("href", ""),
+                title=r.get("title", ""),
+                snippet=r.get("body", ""),
+                rank=i,
             )
             for i, r in enumerate(rows[:k])
         ]

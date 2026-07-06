@@ -69,7 +69,9 @@ def test_oversize_body_skipped():
 @respx.mock
 def test_non_html_content_type_skipped():
     respx.get("https://d.com/").mock(
-        return_value=httpx.Response(200, headers={"content-type": "application/pdf"}, content=b"%PDF")
+        return_value=httpx.Response(
+            200, headers={"content-type": "application/pdf"}, content=b"%PDF"
+        )
     )
     fetcher = HttpxPageFetcher(SETTINGS)
     assert _run(fetcher._fetch_one("https://d.com/")) is None
@@ -77,9 +79,13 @@ def test_non_html_content_type_skipped():
 
 @respx.mock
 def test_one_failed_url_does_not_stop_the_others():
-    respx.get("https://a.com/").mock(return_value=httpx.Response(200, headers=HTML, content=_page("A")))
+    respx.get("https://a.com/").mock(
+        return_value=httpx.Response(200, headers=HTML, content=_page("A"))
+    )
     respx.get("https://bad.com/").mock(return_value=httpx.Response(404))
-    respx.get("https://c.com/").mock(return_value=httpx.Response(200, headers=HTML, content=_page("C")))
+    respx.get("https://c.com/").mock(
+        return_value=httpx.Response(200, headers=HTML, content=_page("C"))
+    )
     fetcher = HttpxPageFetcher(SETTINGS)
     docs = _run(fetcher.fetch(["https://a.com/", "https://bad.com/", "https://c.com/"]))
     assert len(docs) == 2
