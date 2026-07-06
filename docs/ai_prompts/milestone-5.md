@@ -127,3 +127,34 @@ inherent recall gap of any regex filter, explicitly out of the spec's "basic but
 broadening would violate SC-003's zero-false-positive rule. (2) "the image stripper deletes
 `docs![here](url)`" — per CommonMark that IS an image (`<img>`, alt="here"), so stripping is
 both markdown-correct and required by the T4 exfil defence.
+
+## 8. Second manual test session — two dual-use false positives (2026-07-06, "test M5 like I test it manually")
+
+A fresh hands-on session on merged `main` (real Redis + GitHub Models + Tavily) re-ran the
+L1/L2/L3 + degradation scenarios and inspected the ACTUAL Redis-stored chunks (not just
+`ask` stdout). This surfaced two residual false positives that neither the automated
+workflow nor the unit fixtures caught, because they only appear in REAL fetched pages:
+
+- **`developer mode` (fixed)**: ingesting "Explain developer mode in Chrome" fetched the
+  Chromium developer-mode guide; `role_hijack` had kept `developer mode` as a jailbreak-
+  persona token, so "switch to developer mode" was neutralised and the whole page's chunks
+  were flagged `neutralized_instruction` with a corrupted `content_sha256`. Fix: dropped
+  `developer mode` from the persona set — it collides with a real product feature; the DAN
+  "Developer Mode" jailbreak is still caught by its dan/do-anything-now/unrestricted hallmarks.
+- **bare `jailbreak` (fixed)**: the same page's "how you can jailbreak your device" matched
+  the standalone `jailbreak` token. But bare "jailbreak" is descriptive on a security page,
+  and "how do I jailbreak my phone" is a legitimate user topic (not an assistant-role hijack).
+  Fix: dropped the standalone `jailbreak(en|ing)?` token; a real attempt still hits the
+  framing-gated `jailbroken` persona ("pretend you are jailbroken").
+
+Both fixed and regression-guarded (developer-mode + jailbreak prose in `test_sanitizer.py`;
+the queries in `test_guardrails.py`). Re-wiped + re-ingested the developer-mode page →
+**0 chunks with the marker, 0 flagged** (was 1 marker / 10 flagged). Attacks still block,
+103 tests pass. Also re-proven live this session: T1 block (exit 0, one record, no
+web/store), benign miss→hit, the flagged exfil query answering silently, the full chat REPL
+(blocked banner + MISS→web with a real Sources section), keyless `ask` guard + keyless
+`analytics`, and `docker stop memagent-redis` → `[MEMORY OFFLINE …]` degraded answer with
+zero tracebacks. **Lesson (recorded in project memory):** a registry shared between L1
+(adversarial queries) and L3 (benign fetched prose) must be tuned against real pages —
+inspect the stored chunks, not just the answer; synthetic benign fixtures miss dual-use
+words like "developer mode" and "jailbreak" that appear naturally in technical docs.

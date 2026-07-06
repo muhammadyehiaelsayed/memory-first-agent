@@ -93,6 +93,11 @@ def test_benign_technical_prose_not_corrupted():  # workflow HIGH finding regres
         "PostgreSQL can act as a message queue in some architectures.",
         "From now on you will notice the cache warms up faster.",
         "A proxy server can act as an intermediary between clients and servers.",
+        # "developer mode" is a real product feature, not a jailbreak persona (manual-test find):
+        "You can switch to developer mode on your ChromeOS device to disable verified boot.",
+        "To act as a developer mode tester you must first enable the flag.",
+        # bare "jailbreak" is descriptive here, not a role-hijack instruction (manual-test find):
+        "As a Linux hacker you may wonder how you can jailbreak your device to get root.",
     ]:
         clean, flags = sanitize(t)
         assert clean == t, t

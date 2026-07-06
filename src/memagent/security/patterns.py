@@ -65,12 +65,20 @@ PATTERN_REGISTRY: list[Pattern] = [
         # persona token — so benign "act as a mentor" / "developer mode in Chrome" / "from now
         # on you will notice…" no longer match (workflow finding); plus standalone jailbreak
         # tokens. This shared registry also screens fetched content (L3), so tightness here
-        # keeps benign pages from being corrupted.
+        # keeps benign pages from being corrupted. NB: "developer mode" is deliberately NOT a
+        # persona token — it collides with a real product feature (ChromeOS/Chrome/Windows
+        # "developer mode"), and manual testing showed it corrupted a benign Chromium doc;
+        # the DAN "Developer Mode" jailbreak is still caught by its dan/do-anything-now/
+        # unrestricted hallmarks.
         _c(
             r"\b(?:you are now|from now on|pretend|roleplay as|act as|behave as|switch to)\b[\s\S]{0,30}"
-            r"\b(?:dan|unrestricted|jailbroken|uncensored|developer[ -]?mode|do[ -]?anything[ -]?now|"
+            r"\b(?:dan|unrestricted|jailbroken|uncensored|do[ -]?anything[ -]?now|"
             r"no[ -]?restrictions?|without (?:any )?(?:restrictions|rules|filters?)|a different (?:ai|assistant|persona))\b"
-            r"|\b(?:dan mode|jailbreak(?:en|ing)?|do anything now)\b"
+            # standalone tokens are unambiguous attack phrases only. NB: bare "jailbreak" is
+            # deliberately excluded — it collides with benign descriptive prose ("how you can
+            # jailbreak your device" on a security doc) and benign topics ("how do I jailbreak
+            # my phone"); a real jailbreak attempt still hits the framing-gated "jailbroken".
+            r"|\b(?:dan mode|do anything now)\b"
         ),
     ),
     # --- MEDIUM severity -> flag + skip_store ---
