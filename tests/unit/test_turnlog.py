@@ -124,13 +124,14 @@ def test_web_route_builds_web_block():
         fetched_docs=[{"url": "u", "title": "t", "markdown": "m", "summary": None, "ok": True}] * 3
         + [{"url": "u2", "title": "t", "markdown": "", "summary": None, "ok": False}],
         chunks=[{"chunk_id": "c", "text": "x", "url": "u", "title": "t", "chunk_index": 0}] * 14,
+        stored_chunk_ids=[f"chunk:h:{i}" for i in range(12)],  # 12 PERSISTED of 14 produced
     )
     web = build_turn_record(state, Settings())["web"]
     assert web == {
         "provider": "tavily",
         "results_returned": 5,
         "pages_fetched": 3,
-        "chunks_ingested": 14,
+        "chunks_ingested": 12,  # persisted count (stored_chunk_ids), not the 14 produced
     }
 
 

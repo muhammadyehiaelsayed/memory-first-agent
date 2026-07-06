@@ -47,7 +47,7 @@ class MemoryStore(Protocol):
         flags: list[str],
     ) -> list[str]: ...
 
-    async def is_fresh(self, h: str) -> bool:  # h = url_hash(canonicalize(url)); 24h window
+    async def is_fresh(self, h: str) -> bool:  # h = url_hash(url) (canonicalizes internally); 24h
         ...
 
 

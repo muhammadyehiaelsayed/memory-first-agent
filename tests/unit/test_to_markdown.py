@@ -60,6 +60,9 @@ def test_floor_and_cap(monkeypatch, length, expected_len):
         assert result is not None and len(result) == expected_len
 
 
-def test_constants_are_the_documented_values():
-    assert tm.MIN_MARKDOWN_CHARS == 200
-    assert tm.MAX_MARKDOWN_CHARS == 20_000
+def test_markdown_gates_are_settings_fields():
+    from memagent.config import Settings
+
+    s = Settings(_env_file=None)
+    assert s.min_markdown_chars == 200  # floor: reject cookie-wall / JS-shell pages
+    assert s.max_markdown_chars == 20_000  # cap token cost on huge articles

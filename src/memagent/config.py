@@ -1,11 +1,12 @@
-"""Application settings — THE single source of every tunable number and env name.
+"""Application settings — the single source of the project's tunable values and env names.
 
-Every configurable value in the project is a field here (Constitution P-III); other
-modules read from `Settings` and never define their own numbers. `.env.example` is
-generated from this class by `scripts/gen_env_example.py` so docs cannot drift.
+Every user-facing tunable is a field here (Constitution P-III); modules read from `Settings`
+rather than inventing their own knobs. A few internal structural literals (the sanitizer's
+regex sizes, the retry wait caps) stay at their use site. `.env.example` is generated from
+this class by `scripts/gen_env_example.py` so the documented env cannot drift.
 
-Keys are optional at this stage so keyless paths (tests, lint, wipe-memory) run;
-the readable fail-fast check for OPENAI_API_KEY lands in M4's client construction.
+Keys are optional so keyless paths (tests, lint, wipe-memory) run; the readable fail-fast
+check for OPENAI_API_KEY lives in build_openai_clients (llm/clients.py).
 """
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -46,6 +47,9 @@ class Settings(BaseSettings):
     read_timeout_s: int = 10
     page_deadline_s: int = 20
     fetch_max_bytes: int = 2500000
+    max_urls_per_domain: int = 2  # diversity cap in filter_urls
+    min_markdown_chars: int = 200  # reject cookie-wall / JS-shell pages
+    max_markdown_chars: int = 20000  # cap token cost on huge articles
 
     # --- llm timing / retries ---
     llm_timeout_s: int = 45
@@ -55,7 +59,9 @@ class Settings(BaseSettings):
     # --- chunking / context ---
     chunk_size_chars: int = 1600
     chunk_overlap_chars: int = 200
+    min_chunk_chars: int = 100  # drop fragments shorter than this after splitting
     max_chunks_per_page: int = 25
+    summary_input_chars: int = 6000  # cap on the page text sent to the summary LLM
     web_context_chunks_per_page: int = 2
     history_max_turns: int = 6
 

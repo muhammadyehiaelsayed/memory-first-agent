@@ -148,7 +148,9 @@ Stated honestly, each with its named production upgrade:
 Memory-first matching is embedding-similarity, so recall depends on how the re-ask is phrased:
 
 - **Verbatim re-ask → HIT.** "How does Redis vector search work?" asked twice → turn 2 is a
-  `memory_hit` (`sim ≈ 1.0 ≥ 0.70`), answered from memory with no web call.
+  `memory_hit` (`sim ≈ 0.8`, comfortably ≥ 0.70), answered from memory with no web call. It is
+  not a 1.0 self-match: the query is never embedded-and-stored, so the re-ask matches against
+  the stored page's summary + chunks (the demo transcript shows a live figure).
 - **Paraphrase → depends.** "Explain how vectors are searched in Redis" embeds *near* the
   original but may fall just below 0.70 and miss — then it searches the web and ingests, so the
   *next* phrasing in that neighbourhood hits.

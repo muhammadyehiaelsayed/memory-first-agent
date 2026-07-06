@@ -54,9 +54,9 @@ def new_turn_state(
         "query": query,
         "history": (history or [])[-settings.history_max_turns * 2 :],
         "threshold": settings.similarity_threshold,
-        "guard_verdict": "allow",  # guard node activates in M5 (Ruling F)
+        "guard_verdict": "allow",  # guard_input overwrites this before routing
         "guardrail_events": [],
-        "sanitized_query": query,  # L1 sanitization lands in M5
+        "sanitized_query": query,  # guard_input replaces this with the L1-normalized form
         "query_vector": None,
         "memory_hits": [],
         "top_similarity": None,

@@ -6,7 +6,7 @@ regression in _is_private_host would silently let the cloud-metadata SSRF target
 """
 
 from memagent.config import Settings
-from memagent.web.fetch import MAX_URLS_PER_DOMAIN, _is_private_host, filter_urls
+from memagent.web.fetch import _is_private_host, filter_urls
 
 S = Settings(_env_file=None)
 
@@ -44,7 +44,7 @@ def test_max_two_per_registrable_domain():
         ["http://example.com/1", "http://sub.example.com/2", "http://example.com/3"], S
     )
     assert kept == ["http://example.com/1", "http://sub.example.com/2"]
-    assert MAX_URLS_PER_DOMAIN == 2
+    assert S.max_urls_per_domain == 2
 
 
 def test_ordering_preserved_and_public_urls_kept():

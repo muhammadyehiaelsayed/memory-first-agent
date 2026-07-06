@@ -33,7 +33,9 @@ def build_turn_record(state: dict, settings: Settings) -> dict:
             "provider": state.get("search_provider"),
             "results_returned": len(state.get("search_results", [])),
             "pages_fetched": sum(1 for d in state.get("fetched_docs", []) if d.get("ok")),
-            "chunks_ingested": len(state.get("chunks", [])),
+            # chunks actually PERSISTED to memory (0 on skip_store / fresh / store-failure turns),
+            # not the count produced by the chunker — the log must not overstate caching.
+            "chunks_ingested": len(state.get("stored_chunk_ids", [])),
         }
     tokens = {}
     for role in ("answer_llm", "analytics_llm"):

@@ -76,7 +76,7 @@ async def _wipe() -> None:
 
 @app.command()
 def ask(query: str) -> None:
-    """Answer a single question: memory first, web fallback (web path lands in M3)."""
+    """Answer a single question: Redis memory first, web search + fetch fallback on a miss."""
     settings = Settings()
     if not settings.openai_api_key:
         typer.echo(

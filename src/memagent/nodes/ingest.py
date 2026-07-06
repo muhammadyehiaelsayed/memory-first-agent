@@ -10,12 +10,11 @@ while chunking always runs so the in-hand answer keeps its context (specs/003 I2
 """
 
 from memagent.memory.chunking import chunk_markdown
-from memagent.memory.urls import canonicalize, url_hash
+from memagent.memory.urls import url_hash
 from memagent.resources import AgentResources
 from memagent.security.sanitizer import sanitize
 from memagent.state import Chunk, FetchedDoc
 
-SUMMARY_INPUT_CHARS = 6000
 SUMMARY_SYSTEM = (
     "Summarise the following web page content in 5 to 8 sentences. "
     "State only facts taken from the text. Plain prose, no bullet points, "
@@ -38,7 +37,7 @@ def make_ingest_content(resources: AgentResources):
                 continue
 
             clean, flags = sanitize(doc["markdown"])  # ALWAYS before chunking (T3 defence)
-            h = url_hash(canonicalize(doc["url"]))
+            h = url_hash(doc["url"])  # url_hash canonicalizes internally
 
             try:
                 fresh = await resources.memory.is_fresh(h)
@@ -50,7 +49,7 @@ def make_ingest_content(resources: AgentResources):
                 try:
                     result = await resources.analytics_llm.complete(
                         SUMMARY_SYSTEM,
-                        [{"role": "user", "content": clean[:SUMMARY_INPUT_CHARS]}],
+                        [{"role": "user", "content": clean[: settings.summary_input_chars]}],
                     )
                     summary = result.text.strip() or None
                     tokens[f"summary:{h}"] = result.usage

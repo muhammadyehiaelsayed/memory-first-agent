@@ -9,12 +9,12 @@ import asyncio
 
 from memagent.config import Settings
 from memagent.interfaces import CompletionResult
-from memagent.nodes.ingest import SUMMARY_INPUT_CHARS, make_ingest_content
+from memagent.nodes.ingest import make_ingest_content
 from memagent.resources import AgentResources
 from memagent.security.sanitizer import sanitize
 
 S = Settings(_env_file=None)
-LONG_MARKDOWN = "word " * 2000  # 10000 chars, well over SUMMARY_INPUT_CHARS (6000)
+LONG_MARKDOWN = "word " * 2000  # 10000 chars, well over summary_input_chars (6000)
 
 
 def _run(coro):
@@ -83,8 +83,8 @@ def test_summary_input_is_capped_at_6000_chars():
     llm = CapturingSummaryLLM()
     _run(make_ingest_content(_resources(llm, FakeMemory()))(_state()))
     clean = sanitize(LONG_MARKDOWN)[0]
-    assert llm.captured == clean[:SUMMARY_INPUT_CHARS]  # exact prefix, never the full 10k page
-    assert len(llm.captured) == 6000
+    assert llm.captured == clean[: S.summary_input_chars]  # exact prefix, never the full 10k page
+    assert len(llm.captured) == S.summary_input_chars == 6000
 
 
 def test_summary_failure_is_tolerated_and_chunks_still_flow():

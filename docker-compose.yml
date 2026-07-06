@@ -13,6 +13,8 @@ services:
       timeout: 3s
       retries: 10
   redisinsight:
+    # dev-only inspector (port 5540); not exercised by CI or tests, so the floating tag is
+    # intentional — only the redis:8.2 image above is pinned "tested == shipped".
     image: redis/redisinsight:latest
     container_name: memagent-redisinsight
     ports:

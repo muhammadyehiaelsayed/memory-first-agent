@@ -1,8 +1,10 @@
-"""Bounded concurrent page fetcher (M3).
+"""Bounded concurrent page fetcher.
 
-filter_urls is the mini-SSRF guard + diversity filter. HttpxPageFetcher is
-deliberately retry-free: timeouts and caps degrade to skipped pages; the tenacity
-page-fetch policy arrives with M5's reliability.py (Rulings A/D).
+filter_urls is the mini-SSRF guard + diversity filter. HttpxPageFetcher wraps each per-URL
+fetch in the tenacity page-fetch policy (fetch_retry: 2 attempts; retries timeouts and
+502/503/504). The wait_for page deadline stays OUTSIDE the retry so it bounds both attempts,
+and any timeout / size cap / non-retryable status degrades to a skipped page, never a fatal
+error.
 """
 
 import asyncio
@@ -31,7 +33,6 @@ JS_ONLY_DENYLIST = {
     "tiktok.com",
 }
 USER_AGENT = "memagent/1.0 (+https://github.com/muhammadyehiaelsayed/memory-first-agent)"
-MAX_URLS_PER_DOMAIN = 2
 
 _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 
@@ -49,14 +50,15 @@ def _is_private_host(host: str) -> bool:
     try:
         ip = ipaddress.ip_address(host)
     except ValueError:
-        # Hostname (not an IP literal): best-effort DNS resolution is M5 hardening.
+        # Hostname (not an IP literal): a known, accepted limitation of this mini-guard —
+        # we do not resolve DNS, so a hostname that points at a private IP is not caught here.
         return False
     return (
         ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_unspecified
     )
 
 
-def filter_urls(urls: list[str], settings: Settings) -> list[str]:  # noqa: ARG001 — signature fixed by spec
+def filter_urls(urls: list[str], settings: Settings) -> list[str]:
     kept: list[str] = []
     per_domain: dict[str, int] = {}
     for url in urls:
@@ -69,7 +71,7 @@ def filter_urls(urls: list[str], settings: Settings) -> list[str]:  # noqa: ARG0
         domain = _registrable_domain(host)
         if domain in JS_ONLY_DENYLIST:
             continue
-        if per_domain.get(domain, 0) >= MAX_URLS_PER_DOMAIN:
+        if per_domain.get(domain, 0) >= settings.max_urls_per_domain:
             continue
         per_domain[domain] = per_domain.get(domain, 0) + 1
         kept.append(url)
@@ -129,7 +131,7 @@ class HttpxPageFetcher:
                     # Oversize: skip the page entirely — never truncate-and-keep.
                     return None
             html = body.decode(response.encoding or "utf-8", errors="replace")
-            markdown = to_markdown(html)
+            markdown = to_markdown(html, self._settings)
             if markdown is None:
                 return None
             final_url = str(response.url)  # post-redirect URL is the stored identity

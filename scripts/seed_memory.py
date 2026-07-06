@@ -9,12 +9,10 @@ import argparse
 import asyncio
 from pathlib import Path
 
-import redis.asyncio as aioredis
-
 from memagent.config import Settings
-from memagent.llm.clients import OpenAIEmbedder
+from memagent.llm.clients import build_openai_clients
 from memagent.memory.chunking import chunk_markdown
-from memagent.memory.store import RedisMemoryStore
+from memagent.memory.store import RedisMemoryStore, make_redis_client
 from memagent.memory.urls import canonicalize
 from memagent.state import Chunk, FetchedDoc
 
@@ -29,10 +27,10 @@ async def seed(url: str, text: str, title: str) -> int:
         Chunk(chunk_id=f"{i}", text=t, url=canonical, title=title, chunk_index=i)
         for i, t in enumerate(texts)
     ]
-    embedder = OpenAIEmbedder(settings)
+    _, _, embedder = build_openai_clients(settings)  # shared factory; fails fast on a missing key
     vectors = await embedder.embed(texts)  # no summary -> vectors align 1:1 (research D6)
     page = FetchedDoc(url=canonical, title=title, markdown=text, summary=None, ok=True)
-    client = aioredis.from_url(settings.redis_url)
+    client = make_redis_client(settings)  # native retry + socket timeouts, like every entry point
     try:
         store = RedisMemoryStore(settings, client)
         stored = await store.store(page, chunks, vectors, source_query="seed", flags=[])

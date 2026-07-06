@@ -29,7 +29,7 @@ test-integration:
 	uv run pytest -m "integration or e2e"
 
 lint:
-	uv run ruff check .
+	uv run ruff check . && uv run ruff format --check .
 
 demo:
 	uv run memagent chat
