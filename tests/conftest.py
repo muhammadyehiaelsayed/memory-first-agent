@@ -1,6 +1,6 @@
 """Canonical M6 test fixtures — settings, fakes, redis skip/clean, and build_test_resources.
 
-Owned by M6 (Ruling A / spec 006 §6.2). The 12 existing unit tests use their own local
+Owned by M6 (Ruling A / spec 006 §6.2). The upstream unit tests use their own local
 fakes and do NOT import this file; these fixtures serve the integration/e2e tests and the
 standalone eval/render scripts (which import `build_test_resources` after a repo-root
 sys.path shim — tests/ is not an installed package).

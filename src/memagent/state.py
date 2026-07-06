@@ -6,7 +6,7 @@ QueryClassification is imported from analytics.classify (schema-only in M2).
 """
 
 import operator
-from typing import Annotated, Literal, TypedDict
+from typing import Annotated, Literal, NotRequired, TypedDict
 
 from memagent.analytics.classify import QueryClassification
 
@@ -37,6 +37,7 @@ class FetchedDoc(TypedDict):
     markdown: str
     summary: str | None
     ok: bool
+    sanitizer_flags: NotRequired[list[str]]  # attached by ingest_content; feeds the L2 header
 
 
 class Chunk(TypedDict):

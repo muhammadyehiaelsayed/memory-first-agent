@@ -132,3 +132,21 @@ async def test_is_fresh_boundary(clean_index, fake_embedder, settings, monkeypat
     monkeypatch.setattr(store_mod.time, "time", lambda: t0 + window + 100)
     assert await store.is_fresh(h) is False  # well past the window
     assert await store.is_fresh("deadbeefdeadbeef") is False  # unknown url -> not fresh
+
+
+# ---- M8: the doc:{h} meta hash expires in step with its chunks (was written without a TTL) ----
+async def test_meta_hash_has_ttl(clean_index, fake_embedder, settings):
+    from memagent.memory.urls import url_hash
+
+    store = RedisMemoryStore(settings, clean_index.client)
+    page = _page(url="https://redis.io/ttl-meta", title="TTL")
+    chunk = _chunk("body text", page["url"], page["title"])
+    await store.store(
+        page=page,
+        chunks=[chunk],
+        vectors=await fake_embedder.embed(["body text"]),
+        source_query="q",
+        flags=[],
+    )
+    ttl = await clean_index.client.ttl(f"doc:{url_hash(page['url'])}")
+    assert 0 < ttl <= settings.memory_ttl_seconds  # bounded expiry, not -1 (unbounded)

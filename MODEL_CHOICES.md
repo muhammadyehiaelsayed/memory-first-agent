@@ -49,11 +49,13 @@ but NOT for the recorded demo — run that on a real OpenAI key.
 grounded answer over a deliberately small, code-pre-filtered context (threshold routing
 lives in *code*, not model judgment; the context is capped to a per-page summary +
 `WEB_CONTEXT_CHUNKS_PER_PAGE`=2 chunks). That is a grounded/instruction-following task,
-not a deep-reasoning or agentic one. Independent benchmarks put gpt-5.4-mini at or
-above the gpt-5.4 flagship on the multimodal-&-grounded axis (76.6 vs 72.7), while the
-flagship's aggregate lead comes almost entirely from agentic reasoning / coding /
-computer-use — capabilities this architecture intentionally removes. The flagship's
-premium buys headroom the design never exercises.
+not a deep-reasoning or agentic one. Public grounded-RAG / instruction-following
+comparisons place gpt-5.4-mini on par with the gpt-5.4 flagship for this class of task,
+while the flagship's aggregate lead comes almost entirely from agentic reasoning / coding /
+computer-use — capabilities this architecture intentionally removes. (Confirm the exact eval
+figures against the vendor's current model card before quoting them; a specific unversioned
+number is deliberately not reproduced here.) The flagship's premium buys headroom the design
+never exercises.
 
 Two concrete wins for mini in THIS build:
 1. It is **not** a temperature-rejecting reasoning model, so the client can send

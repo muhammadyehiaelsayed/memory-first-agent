@@ -1,10 +1,11 @@
 """Severity-tagged injection pattern registry (M5) — shared by L1 and L3.
 
-The SAME registry powers the L1 input screen (`guardrails.screen_input`) and the L3
-content sanitizer (`sanitizer.sanitize`): one place to tune, two defence points. The
-category -> severity map is Clarification Q1, pinned by the guard tests and the T1 fixture:
-instruction-override / prompt-leak / role-hijack -> HIGH (block); fake-role-markers /
-exfil-coaxing -> MEDIUM (flag + skip_store). Patterns are kept tight enough that benign
+The registry powers the L1 input screen (`guardrails.screen_input`, ALL severities) and the
+L3 content sanitizer (`sanitizer.sanitize`, HIGH severities ONLY — the MEDIUM patterns match
+benign fetched prose, so in content they are input-screening signals, not neutralisation
+targets). The category -> severity map is Clarification Q1, pinned by the guard tests and the
+T1 fixture: instruction-override / prompt-leak / role-hijack -> HIGH (block); fake-role-markers
+/ exfil-coaxing -> MEDIUM (flag + skip_store). Patterns are kept tight enough that benign
 queries ("How does Redis vector search work?") never match.
 """
 

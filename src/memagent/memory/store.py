@@ -197,6 +197,8 @@ class RedisMemoryStore:
                 mapping={"num_chunks": len(chunks), "fetched_at": fetched_at, "url": page["url"]},
             )
         )
+        if ttl > 0:  # freshness bookkeeping expires in step with the chunks it describes
+            await self._io(self._redis.expire(meta_key, ttl))
         return stored_ids
 
     async def is_fresh(self, h: str) -> bool:

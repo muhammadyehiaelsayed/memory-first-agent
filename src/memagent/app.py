@@ -1,6 +1,7 @@
 """Agent facade: build_resources() + Agent.answer() -> TurnResult + logging setup."""
 
 import logging
+import os
 import sys
 import time
 from typing import NamedTuple
@@ -29,10 +30,27 @@ class TurnResult(NamedTuple):
 
 
 def configure_logging(settings: Settings) -> None:
-    """Operational logs -> STDERR only (stdout stays pipe-clean, FR-M4-21)."""
-    logging.basicConfig(
-        stream=sys.stderr, level=getattr(logging, settings.log_level.upper(), logging.INFO)
-    )
+    """Operational logs -> STDERR only (stdout stays pipe-clean, FR-M4-21).
+
+    On an interactive terminal the operational chatter — httpx request lines, per-node
+    structlog breadcrumbs, and tenacity retry WARNINGs (e.g. rate-limit backoff) — is
+    silenced so it never clutters the live spinner; the graded per-turn record in
+    logs/turns.jsonl is written regardless, so real observability is untouched, and a
+    failed turn still surfaces its apology on stdout. Piped / CI runs (stderr is not a
+    TTY) keep the full ``settings.log_level`` for debugging, and an explicit
+    ``LOG_LEVEL`` always wins.
+    """
+    settings_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    if os.getenv("LOG_LEVEL"):
+        level = settings_level  # user asked for a specific level — honour it everywhere
+    elif sys.stderr.isatty():
+        level = logging.CRITICAL  # interactive: only the spinner + result, no log noise
+    else:
+        level = settings_level  # piped / CI: keep full logs on stderr
+    logging.basicConfig(stream=sys.stderr, level=level)
+    logging.getLogger().setLevel(level)  # applies even if basicConfig already ran
+    logging.getLogger("httpx").setLevel(level)
+    logging.getLogger("httpcore").setLevel(level)
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
@@ -40,6 +58,7 @@ def configure_logging(settings: Settings) -> None:
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.dev.ConsoleRenderer(),
         ],
+        wrapper_class=structlog.make_filtering_bound_logger(level),
         logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
     )
 
@@ -54,9 +73,9 @@ def new_turn_state(
         "query": query,
         "history": (history or [])[-settings.history_max_turns * 2 :],
         "threshold": settings.similarity_threshold,
-        "guard_verdict": "allow",  # guard node activates in M5 (Ruling F)
+        "guard_verdict": "allow",  # guard_input overwrites this before routing
         "guardrail_events": [],
-        "sanitized_query": query,  # L1 sanitization lands in M5
+        "sanitized_query": query,  # guard_input replaces this with the L1-normalized form
         "query_vector": None,
         "memory_hits": [],
         "top_similarity": None,

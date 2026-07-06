@@ -21,6 +21,11 @@ analyze → implement) with a human decision at every clarification gate. Code i
 milestone by milestone against reviewed specs; every milestone ends with a Definition of
 Done sweep and this file's per-milestone append.
 
+Two later AI-assisted passes hardened the delivery beyond the six planned milestones — M7
+(test-coverage hardening → `v1.1`) and M8 (delivery-readiness review + fixes → `v1.2`). Each
+was driven by an adversarial subagent workflow that audited the shipped repo, reported findings
+to the user *before* any change, and was logged the same append-only way (§5).
+
 ## 3. Per-component provenance table
 
 | Component | Provenance | Notes |
@@ -53,6 +58,9 @@ Done sweep and this file's per-milestone append.
 | `utils/reliability.py`, `utils/errors.py`, client/`web`/`store` retry wraps | AI-generated, human-reviewed | single-owner tenacity policies (analytics client deliberately unwrapped, D3), 4 typed errors, redis native `Retry`; live-verified library surfaces (M5) |
 | `nodes/{memory,answer}.py` degradation, `graph.py` guard rewire, `cli.py` banners, `app.py` `TurnResult.degradation` | AI-generated, human-reviewed | the degradation matrix wired end-to-end; `ask` table orders `failed` before `redis_down` (recheck fix B) (M5) |
 | `tests/unit/{test_guardrails,test_sanitizer,test_search_retry,test_fetch_retry,test_reliability}.py`, `docs/threat_model.md`, `scripts/render_graph.py` | AI-generated | five M5-owned test files (tests-first) + threat model T1–T4 + keyless graph render (M5) |
+| `tests/conftest.py`, `tests/integration/`, `tests/e2e/`, `scripts/eval_lifecycle.py`, `scripts/eval_grounding.py`, CI, README/docs | AI-generated, human-reviewed | integration + e2e + eval harnesses + CI green + docs; repo-probe / plan-recheck / impl-verify workflows caught defects before coding (M6, v1.0) |
+| `tests/unit/{test_url_filter,test_search_provider,test_ingest,test_report,test_clients,test_m1_contracts,test_answer_context,test_timing}.py` + test edits | AI-generated, human-reviewed | 18 audited test-coverage gaps closed, mutation-verified 14/14; dead `_LLM_FAST_FAIL_STATUS` removed (M7, v1.1) |
+| L3 sanitizer HIGH-only scope, `doc:{h}` meta TTL, constants→`Settings`, `scripts/seed_memory.py` fix, stale-docstring polish | AI-generated, human-reviewed | delivery-readiness review (36-agent workflow); 23 findings fixed, 3 behavior changes mutation-verified (M8, v1.2) |
 
 ## 4. Curated highlights (3-6 representative prompts)
 
@@ -92,6 +100,12 @@ chronological log of every instruction:
   CI green, docs, v1.0; the full Spec Kit chain, the repo-probe + plan-recheck + tasks-audit
   workflows that caught the `Agent(resources)` and full-HTML-fixture defects before coding, and
   the implementation + verification of the miss→hit core proof)
+- `docs/ai_prompts/milestone-7.md` — Milestone 7 (post-v1.0 test-coverage hardening → v1.1; a
+  25-agent audit workflow found 18 test-coverage gaps behind a fully-green suite, all closed and
+  mutation-verified 14/14, plus removal of a dead constant)
+- `docs/ai_prompts/milestone-8.md` — Milestone 8 (delivery-readiness review + fixes → v1.2; a
+  live manual e2e run and a 36-agent reviewer-lens file review found 23 findings, all fixed
+  incl. three mutation-verified behavior changes)
 
 ## 6. What was reviewed, tested, and corrected by hand
 

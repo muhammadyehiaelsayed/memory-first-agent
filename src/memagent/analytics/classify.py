@@ -1,8 +1,9 @@
 """Query classification: schema (M2) + classifier hardening (M4, PLAN section 8.3).
 
 The enums' _missing_ hooks map out-of-enum labels to "other" instead of raising, and
-classify() NEVER raises: any failure (timeout, exception, unparseable output) degrades to
-(None, {}) -> the turn record's "analytics": null, reported as "Unclassified". The
+classify() NEVER raises: any failure (timeout, exception, unparseable output) degrades to a
+null classification (None) -> the turn record's "analytics": null, reported as "Unclassified"
+(a model refusal returns None alongside its usage dict; other failures return an empty one). The
 tenacity x2 policy here is the classifier's own null-tolerant policy (distinct from M5's
 reliability.py raise-after-4 client policy); M5 may relocate it without changing this
 signature.

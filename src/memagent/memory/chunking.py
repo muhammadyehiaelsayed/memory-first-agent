@@ -4,8 +4,6 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from memagent.config import Settings
 
-_MIN_CHUNK_CHARS = 100
-
 _MARKDOWN_SEPARATORS = ["\n# ", "\n## ", "\n### ", "\n#### ", "\n\n", "\n", ". ", " ", ""]
 
 
@@ -17,5 +15,5 @@ def chunk_markdown(text: str, settings: Settings | None = None) -> list[str]:
         separators=_MARKDOWN_SEPARATORS,
     )
     chunks = [c.strip() for c in splitter.split_text(text)]
-    chunks = [c for c in chunks if len(c) >= _MIN_CHUNK_CHARS]
+    chunks = [c for c in chunks if len(c) >= settings.min_chunk_chars]
     return chunks[: settings.max_chunks_per_page]

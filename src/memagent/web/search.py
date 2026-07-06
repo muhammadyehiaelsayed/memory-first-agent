@@ -1,10 +1,10 @@
-"""Tavily via raw httpx + ddgs fallback (M3).
+"""Tavily via raw httpx + ddgs fallback.
 
-TavilySearcher holds a reusable httpx.AsyncClient (never the vendor SDK package, which
-would be invisible to respx) so M5's retry tests can see every request. FallbackProvider fast-fails to keyless ddgs on ANY
-Tavily HTTP/transport error — the tenacity retry policy arrives with M5's
-reliability.py (Rulings A/D); adding retries here would double-own the concern
-(Constitution P-III). Clients rely on httpx default timeouts until M5 wraps them.
+TavilySearcher holds a reusable httpx.AsyncClient (never the vendor SDK package, which would
+be invisible to respx) with explicit connect/read timeouts, and applies the tenacity
+tavily_retry policy at its single POST call-site: 429/5xx are retried then surfaced as
+SearchUnavailableError; 4xx re-raise the original so FallbackProvider falls through to the
+keyless ddgs provider. Retries live only here — one owner (Constitution P-III).
 """
 
 import asyncio

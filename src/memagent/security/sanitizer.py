@@ -4,12 +4,16 @@ Runs between markdown conversion and chunking (wired by M3's ingest_content; tha
 is FROZEN). Strips dangerous constructs and NEUTRALISES injection phrases to a visible
 marker — never silently deletes — so stored text is safe to replay yet grounding stays
 coherent and auditable. The signature `sanitize(text) -> (clean_text, flags)` is unchanged.
-Shares PATTERN_REGISTRY with the L1 screen (one registry, two defence points).
+
+It neutralises only the HIGH-severity patterns from PATTERN_REGISTRY (instruction-override /
+prompt-leak / role-hijack). The MEDIUM patterns (fake_role_markers, exfil_coaxing) are L1
+INPUT signals only: applied to fetched CONTENT they match common benign page text — chat
+transcripts, "contact us" emails — and would corrupt the grounding corpus.
 """
 
 import re
 
-from memagent.security.patterns import PATTERN_REGISTRY
+from memagent.security.patterns import PATTERN_REGISTRY, Severity
 
 NEUTRALIZED = "[removed-suspicious-instruction]"
 BASE64_MIN = 512  # a base64 run this long or longer is stripped (PLAN-silent default)
@@ -45,6 +49,9 @@ def sanitize(text: str) -> tuple[str, list[str]]:
     _flag(n, flags, "markdown_image_removed")
     neutralised = 0
     for pattern in PATTERN_REGISTRY:
+        # HIGH only: MEDIUM patterns match benign fetched prose (see module docstring).
+        if pattern.severity is not Severity.HIGH:
+            continue
         text, n = pattern.regex.subn(NEUTRALIZED, text)
         neutralised += n
     _flag(neutralised, flags, "neutralized_instruction")
