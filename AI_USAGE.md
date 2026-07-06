@@ -48,7 +48,11 @@ Done sweep and this file's per-milestone append.
 | `analytics/report.py`, `logs/turns.sample.jsonl`, `cli.py` analytics | AI-generated | aggregate + rich tables, `--json`, markup-escape on user strings; 10-record sample (M4) |
 | `cli.py` chat REPL, `app.py` `configure_logging`/`new_turn_state`, `utils/timing.py`, `graph.py` timed() wiring | AI-generated, human-reviewed | streaming banners, 6-turn history cap, stderr-only structlog with turn_id, single-owner stage latency (M4) |
 | `tests/unit/test_classifier_parsing.py`, `tests/unit/test_turnlog.py`, `MODEL_CHOICES.md` port | AI-generated | the two M4-owned test files (tests-first); prices re-verified 2026-07-05 on the official page (M4) |
-| Remaining stubs (`security/guardrails`, `utils/reliability.py`, `utils/errors.py`) | AI-generated | docstring-only; filled in M5 |
+| `security/patterns.py`, `security/guardrails.py`, `nodes/guard.py` | AI-generated, human-reviewed | L1 severity-tagged registry + input screen + guard entry node; patterns tightened after the impl-verification workflow caught benign false positives (M5, see §6) |
+| `security/sanitizer.py` (real body), `llm/prompts.py` (L2 finalised) | AI-generated, human-reviewed | L3 neutralise-not-delete sharing the L1 registry; hardened system prompt + provenance-headed `wrap_context`; bodies swapped at the frozen call-sites (Rulings C/E) (M5) |
+| `utils/reliability.py`, `utils/errors.py`, client/`web`/`store` retry wraps | AI-generated, human-reviewed | single-owner tenacity policies (analytics client deliberately unwrapped, D3), 4 typed errors, redis native `Retry`; live-verified library surfaces (M5) |
+| `nodes/{memory,answer}.py` degradation, `graph.py` guard rewire, `cli.py` banners, `app.py` `TurnResult.degradation` | AI-generated, human-reviewed | the degradation matrix wired end-to-end; `ask` table orders `failed` before `redis_down` (recheck fix B) (M5) |
+| `tests/unit/{test_guardrails,test_sanitizer,test_search_retry,test_fetch_retry,test_reliability}.py`, `docs/threat_model.md`, `scripts/render_graph.py` | AI-generated | five M5-owned test files (tests-first) + threat model T1–T4 + keyless graph render (M5) |
 
 ## 4. Curated highlights (3-6 representative prompts)
 
@@ -79,6 +83,10 @@ instruction record:
   REPL, finalized clients; PAT/pricing/probe verification records, analyze findings, the
   ISO-language and latency-single-owner fixes, and the pending pinned-model temperature
   probe status)
+- `docs/ai_prompts/milestone-5.md` — Milestone 5 (guardrails L1/L2/L3 + reliability retries
+  + degradation matrix; the four clarifications, three planning-artifact verification
+  workflows, the live manual-test session, and the impl-verification workflow that caught
+  four false-positive/substring bugs in the shipped code — all fixed and regression-guarded)
 
 ## 6. What was reviewed, tested, and corrected by hand
 
@@ -106,6 +114,20 @@ instruction record:
   the hit path crashed the chat REPL AND lost the turn's log record. Also caught: a corrupt
   JSONL line crashed `memagent analytics`, and `--json` emitted prose on a missing log.
   All three fixed and re-verified (see milestone-4.md §7a).
+- M5's `/speckit-plan recheck` ran an adversarial workflow over the planning artifacts (17
+  findings → 8 confirmed → 6 fixes) and a tasks audit (6 doc-accuracy fixes) BEFORE any code
+  — catching a wrong CLI exit-code ordering and an under-specified provenance chain while
+  they were still cheap to fix.
+- M5's impl-verification workflow (run after the 100-test suite was green, the same
+  "prove it, don't assume it" discipline as the M3/M4 manual sessions) caught four real
+  bugs the tests missed: the shared injection registry, applied to fetched web content in
+  L3, corrupted benign technical prose ("PostgreSQL can act as a message queue") and
+  falsely flagged it; the same `role_hijack`/`instruction_override` looseness over-BLOCKED
+  benign queries at L1; and a `"sources:" in answer.lower()` check matched inside
+  "resources:", silently dropping the citation footer. All four fixed (tighter,
+  context-anchored patterns; a line-anchored Sources header check) and regression-guarded;
+  two other reported findings were correctly refuted (an inherent regex recall gap, and a
+  CommonMark-correct image strip). See milestone-5.md §7.
 - Every Definition of Done command was executed for real (see milestone log), not assumed.
 
 ## 7. What was deliberately NOT AI-generated

@@ -9,23 +9,22 @@ import asyncio
 import json
 from pathlib import Path
 
-import redis.asyncio as aioredis
 import typer
-from redis import exceptions as redis_exceptions
 from redisvl.exceptions import RedisSearchError
 from rich.console import Console
 
 from memagent.analytics.report import aggregate, render_report
 from memagent.config import Settings
 from memagent.memory.schema import get_index, wipe_index
+from memagent.memory.store import make_redis_client
+from memagent.utils.errors import REDIS_DOWN_ERRORS, redis_down_in_chain
 
 app = typer.Typer(add_completion=False, help="Memory-first web agent")
 
-# redis-py's ConnectionError/TimeoutError do NOT subclass the builtins.
-_REDIS_DOWN = (redis_exceptions.ConnectionError, redis_exceptions.TimeoutError, OSError)
-
-# The ONE canonical miss banner (arrow included) — reused verbatim by ask AND chat.
+# Canonical banners (arrows included) — reused verbatim by ask AND chat.
 MISS_BANNER = "[MEMORY MISS → searching the web]"
+BLOCKED_BANNER = "[BLOCKED by input guard]"
+MEMORY_OFFLINE_BANNER = "[MEMORY OFFLINE → searching the web (not cached)]"
 ANSWER_NODES = {"answer_from_memory", "answer_from_web", "answer_failure"}
 
 
@@ -38,20 +37,6 @@ def _print_sources(sources: list[dict]) -> None:
         typer.echo("")
         for src in sources:
             typer.echo(f"({src['origin']}) {src['title']} <{src['url']}>")
-
-
-def _redis_down_in_chain(exc: BaseException) -> bool:
-    """redisvl wraps connection failures in RedisSearchError — walk the cause chain.
-
-    Found in the M3 manual test: `ask` with Redis down surfaced a RedisSearchError
-    traceback wall instead of the readable one-line error the CLI promises.
-    """
-    cause: BaseException | None = exc
-    while cause is not None:
-        if isinstance(cause, _REDIS_DOWN):
-            return True
-        cause = cause.__cause__
-    return False
 
 
 def _exit_redis_down(settings: Settings, exc: BaseException) -> None:
@@ -68,7 +53,7 @@ def wipe_memory() -> None:
     """Drop and recreate the Redis vector index (also the dims-change recovery path)."""
     try:
         asyncio.run(_wipe())
-    except _REDIS_DOWN as exc:
+    except REDIS_DOWN_ERRORS as exc:
         settings = Settings()
         typer.echo(
             f"error: cannot reach Redis at {settings.redis_url} - is it running? "
@@ -80,7 +65,7 @@ def wipe_memory() -> None:
 
 async def _wipe() -> None:
     settings = Settings()
-    client = aioredis.from_url(settings.redis_url)
+    client = make_redis_client(settings)
     try:
         index = get_index(settings, client)
         await wipe_index(index)
@@ -102,14 +87,25 @@ def ask(query: str) -> None:
         raise typer.Exit(code=1)
     try:
         result = asyncio.run(_ask(query, settings))
-    except _REDIS_DOWN as exc:
+    except REDIS_DOWN_ERRORS as exc:
         _exit_redis_down(settings, exc)
     except RedisSearchError as exc:
-        if not _redis_down_in_chain(exc):
+        if not redis_down_in_chain(exc):
             raise
         _exit_redis_down(settings, exc)
+    # Top-down, first match wins. `failed` is checked BEFORE `redis_down` so a lingering
+    # degradation label never suppresses the failed exit-1 contract (FR-M5-27).
+    if result.route == "blocked":
+        typer.echo(BLOCKED_BANNER)
+        typer.echo(result.answer or "")
+        return  # no sources, exit 0 — the guard worked as designed (not a failure)
+    if result.route == "failed":
+        typer.echo(result.answer or "")  # apology, no banner
+        raise typer.Exit(code=1)
     if result.route == "memory_hit":
         typer.echo(_hit_banner(result.similarity))
+    elif result.degradation == "redis_down":
+        typer.echo(MEMORY_OFFLINE_BANNER)
     else:
         typer.echo(MISS_BANNER)
     typer.echo(result.answer or "")
@@ -136,10 +132,10 @@ def chat() -> None:
         raise typer.Exit(code=1)
     try:
         asyncio.run(_chat(settings))
-    except _REDIS_DOWN as exc:
+    except REDIS_DOWN_ERRORS as exc:
         _exit_redis_down(settings, exc)
     except RedisSearchError as exc:
-        if not _redis_down_in_chain(exc):
+        if not redis_down_in_chain(exc):
             raise
         _exit_redis_down(settings, exc)
 
@@ -172,13 +168,15 @@ async def _chat(settings: Settings) -> None:
                 for node, update in chunk.items():
                     update = update or {}
                     if node == "guard_input" and update.get("route") == "blocked":
-                        # dormant until M5 activates guard_input (Ruling F)
+                        typer.echo(BLOCKED_BANNER)
                         if update.get("answer"):
                             answer = update["answer"]
                             typer.echo(answer)
                     if node == "memory_search":
                         sim = update.get("top_similarity")
-                        if sim is not None and sim >= state["threshold"]:
+                        if update.get("degradation") == "redis_down":
+                            typer.echo(MEMORY_OFFLINE_BANNER)  # Redis down mid-turn → web-only
+                        elif sim is not None and sim >= state["threshold"]:
                             typer.echo(_hit_banner(sim))
                         else:
                             typer.echo(MISS_BANNER)

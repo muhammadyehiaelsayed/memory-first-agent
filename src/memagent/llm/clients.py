@@ -12,30 +12,40 @@ from pydantic import BaseModel
 
 from memagent.config import Settings
 from memagent.interfaces import CompletionResult
+from memagent.utils.reliability import llm_retry
 
 CONVERSATION_MAX_TOKENS = 2048  # code constants, not env vars (PLAN section 6)
 ANALYTICS_MAX_TOKENS = 256      # also caps M3's per-page summaries (5-8 sentences fit)
 
 
 class OpenAIEmbedder:
-    def __init__(self, client: AsyncOpenAI, model: str, dim: int):
+    def __init__(self, client: AsyncOpenAI, model: str, dim: int, retrying=None):
         self._client = client
         self._model = model
         self.dim = dim
+        if retrying is not None:  # M5: wrap the ONE network seam (Ruling D)
+            self._embed_call = retrying(self._embed_call)
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        resp = await self._client.embeddings.create(model=self._model, input=texts)
+        resp = await self._embed_call(model=self._model, input=texts)
         return [d.embedding for d in sorted(resp.data, key=lambda d: d.index)]
+
+    async def _embed_call(self, **kw):
+        return await self._client.embeddings.create(**kw)
 
 
 class OpenAIChatLLM:
     def __init__(
-        self, client: AsyncOpenAI, model: str, max_tokens: int, temperature: float | None = 0.0
+        self, client: AsyncOpenAI, model: str, max_tokens: int, temperature: float | None = 0.0,
+        retrying=None,
     ):
         self._client = client
         self._model = model
         self._max_tokens = max_tokens
         self._temperature = temperature
+        if retrying is not None:  # M5: wrap the two network seams (Ruling D)
+            self._call = retrying(self._call)
+            self._parse_call = retrying(self._parse_call)
 
     def _usage(self, resp) -> dict:
         return {
@@ -85,11 +95,18 @@ def build_openai_clients(settings: Settings) -> tuple[OpenAIChatLLM, OpenAIChatL
         max_retries=0,
         timeout=float(settings.llm_timeout_s),
     )
+    retrying = llm_retry(settings)
     conversation = OpenAIChatLLM(
-        client, settings.conversation_model, CONVERSATION_MAX_TOKENS, temperature=0.0
+        client, settings.conversation_model, CONVERSATION_MAX_TOKENS, temperature=0.0,
+        retrying=retrying,
     )
+    # Analytics client is deliberately NOT wrapped (D3): classify.py owns its own
+    # wait_for(8s) + stop_after_attempt(2); wrapping here would nest 2×4 retries and
+    # break the M4 exactly-2-calls tests. Its failure already degrades to analytics=null.
     analytics = OpenAIChatLLM(
         client, settings.analytics_model, ANALYTICS_MAX_TOKENS, temperature=0.0
     )
-    embedder = OpenAIEmbedder(client, settings.embedding_model, settings.embedding_dim)
+    embedder = OpenAIEmbedder(
+        client, settings.embedding_model, settings.embedding_dim, retrying=retrying
+    )
     return conversation, analytics, embedder

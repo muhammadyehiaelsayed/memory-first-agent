@@ -16,6 +16,7 @@ import structlog
 
 from memagent.config import Settings
 from memagent.state import FetchedDoc
+from memagent.utils.reliability import fetch_retry
 from memagent.web.to_markdown import to_markdown
 
 ALLOWED_SCHEMES = {"http", "https"}
@@ -95,6 +96,9 @@ class HttpxPageFetcher:
             headers={"User-Agent": USER_AGENT},
         )
         self._semaphore = asyncio.Semaphore(settings.fetch_concurrency)
+        # M5: retry the per-URL transport (Ruling D); the wait_for deadline in
+        # _fetch_guarded stays OUTSIDE, so it bounds BOTH attempts.
+        self._fetch_one = fetch_retry(settings)(self._fetch_one)
 
     async def fetch(self, urls: list[str]) -> list[FetchedDoc]:
         results = await asyncio.gather(*(self._fetch_guarded(u) for u in urls))
