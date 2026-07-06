@@ -1,5 +1,12 @@
 # Demo Transcript — Milestone 3: the miss→ingest→hit lifecycle
 
+> **M6 status (2026-07-06):** the transcript below is a REAL live capture from Milestone 3 on
+> the **GitHub Models dev tier**. Constitution VIII reserves the *recorded* demo for a
+> production `OPENAI_API_KEY`, so the production-key re-capture via `scripts/capture_demo.py`
+> (FR-020) is **pending real-key capture** (Clarification Q1) and does not block `v1.0`. The
+> same miss→hit behaviour is proven keylessly in CI by `tests/e2e/test_lifecycle.py` and
+> `scripts/eval_lifecycle.py --mock`.
+
 Captured live on 2026-07-05 (unedited command output; session ran on the GitHub Models
 free tier + Tavily free tier — the recorded M6 demo re-runs this on the production key).
 

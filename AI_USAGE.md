@@ -70,8 +70,9 @@ Done sweep and this file's per-milestone append.
 
 ## 5. Complete prompt log (see docs/ai_prompts/)
 
-One file per milestone, appended as that milestone is built — the chronological
-instruction record:
+`docs/ai_prompts/` is **the complete instruction record** — one file per milestone, appended
+as that milestone is built (never retroactively, per Constitution Principle VII), the
+chronological log of every instruction:
 
 - `docs/ai_prompts/milestone-1.md` — Milestone 1 (scaffold, toolchain, index schema)
 - `docs/ai_prompts/milestone-2.md` — Milestone 2 (memory path, threshold routing, live
@@ -87,6 +88,10 @@ instruction record:
   + degradation matrix; the four clarifications, three planning-artifact verification
   workflows, the live manual-test session, and the impl-verification workflow that caught
   four false-positive/substring bugs in the shipped code — all fixed and regression-guarded)
+- `docs/ai_prompts/milestone-6.md` — Milestone 6 (integration + e2e tests, eval harnesses,
+  CI green, docs, v1.0; the full Spec Kit chain, the repo-probe + plan-recheck + tasks-audit
+  workflows that caught the `Agent(resources)` and full-HTML-fixture defects before coding, and
+  the implementation + verification of the miss→hit core proof)
 
 ## 6. What was reviewed, tested, and corrected by hand
 
