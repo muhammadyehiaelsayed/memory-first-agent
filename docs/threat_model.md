@@ -1,16 +1,22 @@
 # Threat model (M5)
 
 The memory-first web agent ingests untrusted web content and stores it for reuse, so the
-threat model centres on prompt injection and memory poisoning. Four threats are defended;
+threat model centres on prompt injection and memory poisoning. Five threats are defended;
 the mitigations are the three guardrail layers (L1 input screen, L2 instruction/data
-separation, L3 sanitize-before-store) plus an output defence.
+separation, L3 sanitize-before-store) plus an output defence and a fetch-side SSRF guard.
 
 | ID | Threat | Mitigation |
 |----|--------|------------|
 | T1 | Direct injection in the user query | **L1** input screen (`security/guardrails.py` + `security/patterns.py`): NFKC-normalise + zero-width strip → severity-tagged registry match; HIGH → refuse the turn (`blocked`, logged, web/store never touched); MEDIUM → answer but never cache. Plus **L2** prompt hardening. |
 | T2 | Indirect injection inside fetched pages | **L2** data/instruction separation (`llm/prompts.py`): retrieved content is quoted DATA inside `<untrusted_context>` with per-source provenance headers, tag-breakout escaped, the user question placed last; **L3** sanitizer neutralises injection phrases in the fetched text before it is ever used. |
-| T3 | **Memory poisoning** — injected content stored in Redis and replayed as trusted context on future hits (highest-value threat) | **L3 sanitize-before-store** (`security/sanitizer.py`): fetched content is neutralised **once, between markdown conversion and chunking**, so stored text is always sanitised text. Injection phrases become the literal marker `[removed-suspicious-instruction]` (never silently deleted). `sanitizer_flags` and a `content_sha256` fingerprint are persisted per chunk and re-attached in the L2 provenance header on every memory hit, so poisoned-but-neutralised content always replays as flagged quoted data. |
+| T3 | **Memory poisoning** — injected content stored in Redis and replayed as trusted context on future hits (highest-value threat) | **L3 sanitize-before-store** (`security/sanitizer.py`): fetched content is neutralised **once, between markdown conversion and chunking**, so stored text is always sanitised text. Injection phrases become the literal marker `[removed-suspicious-instruction]` (never silently deleted). `sanitizer_flags` and a `content_sha256` fingerprint are persisted per chunk, and the flags are re-attached in the L2 provenance header on every memory hit, so poisoned-but-neutralised content always replays as flagged quoted data. |
 | T4 | Exfiltration / unsafe output (attacker URLs, tracker images) | The L2 prompt rule "cite only URLs that appear in a `source_url` field" plus a markdown-image strip applied to the produced answer text in both answer nodes, so a tracker/exfil image can never reach output even if the model emits one. |
+| T5 | **SSRF via fetched URLs** — a search result (or a page it redirects to) pointing at cloud metadata / loopback / internal services | Fetch-side guard (`web/fetch.py`): `filter_urls` drops non-http(s) schemes and private/loopback/link-local IP literals from search results, and the fetcher follows redirects **manually** (`follow_redirects=False`, capped at `MAX_REDIRECTS`), re-running `_is_safe_fetch_target` on **every hop** so a public page cannot 302 the fetcher into `169.254.169.254`/loopback. Hostnames are DNS-resolved (`getaddrinfo`) and rejected if any resolved address is private/loopback/link-local/reserved; only the DNS-rebinding TOCTOU race remains out of scope. |
+
+Every mitigation and degradation path above is pinned by executable BDD scenarios
+(`tests/bdd/features/security_*.feature`, `nodes_guard.feature`, `utils_reliability.feature`;
+the blocked/degraded/failed routes end-to-end in `00_main_functionality.feature` — full index
+and traceability matrix in `docs/BDD.md`).
 
 ## Reliability posture
 
@@ -25,6 +31,13 @@ traceback.
 Stated plainly (no jailbreak-proof claims):
 
 - ML-based injection classifiers (e.g. llm-guard / Prompt-Guard) — a production upgrade path.
+- **Non-English / non-Latin-script injection.** The shared L1/L3 pattern registry
+  (`security/patterns.py`) keys on English, Latin-script tokens, so injection or
+  memory-poisoning phrased in another language / script is not matched by the deterministic
+  guards — an accepted, tested limitation (the registry behaviour is pinned by BDD scenarios,
+  but only over English inputs). The upgrade path is a lightweight LLM-classifier gate for
+  non-English / non-Latin-script inputs ahead of the regex layer (the ML-classifier item
+  above, extended to language coverage).
 - DLP / PII redaction.
 - URL reputation / allow-listing.
 - Authentication and rate limiting.

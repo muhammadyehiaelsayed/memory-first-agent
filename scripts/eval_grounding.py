@@ -1,6 +1,6 @@
 """Grounding eval harness — an honest DEMONSTRATION, not a benchmark (FR-015, FR-016).
 
-python scripts/eval_grounding.py --mock   # FakeLLM answerer + judge; keyless AND redis-less; exit 0.
+python scripts/eval_grounding.py --mock   # keyless AND redis-less; derives verdicts, non-zero on regression.
 python scripts/eval_grounding.py          # real: nano model as LLM-judge (needs OPENAI_API_KEY).
 """
 
@@ -88,17 +88,64 @@ def _render(rows: list[tuple]) -> None:
     print("(Demonstration only — a real benchmark needs a labeled dataset and independent judges.)")
 
 
-async def _run_mock() -> int:
-    from tests.conftest import FakeLLM
+ABSTAIN = "insufficient context"  # the exact refusal ANSWER_SYS mandates
 
-    answerer = FakeLLM(answer=f"Grounded in the context. Sources:\n- {SRC}")
-    judge = FakeLLM(
-        schema_factory=lambda s: GroundingVerdict(
-            grounded=True, citations_valid=True, abstained_correctly=True
-        )
+
+async def _run_mock() -> int:
+    """Keyless, Redis-less DEMONSTRATION that also exercises its own branches.
+
+    The answerer emits the real "insufficient context" refusal whenever the context
+    carries no source_url to cite; the judge DERIVES each verdict from the actual
+    answer (not a hard-coded pass) — abstained_correctly from whether the answer
+    abstained, grounded/citations from the cited source in the non-abstain cases.
+    So the scorecard reflects real behaviour and the run returns non-zero if that
+    behaviour regressed, instead of being a green-forever no-op.
+    """
+    from memagent.interfaces import CompletionResult
+
+    _usage = {"input_tokens": 0, "output_tokens": 0, "model": "mock"}
+
+    class _CtxAnswerer:
+        """Answers from context, abstaining (per ANSWER_SYS) when nothing is citable."""
+
+        def __init__(self):
+            self.complete_calls = 0
+
+        async def complete(self, system, messages):
+            self.complete_calls += 1
+            ctx = messages[-1]["content"]
+            text = (
+                f"Grounded in the context. Sources:\n- {SRC}" if "source_url=" in ctx else ABSTAIN
+            )
+            return CompletionResult(text=text, usage=_usage)
+
+    class _DerivingJudge:
+        """Reads the answer + expected label out of the prompt and derives the verdict,
+        so a broken answerer surfaces as a failing row rather than a silent pass."""
+
+        def __init__(self):
+            self.parse_calls = 0
+
+        async def parse(self, system, user, schema):
+            self.parse_calls += 1
+            answer = user.split("\nAnswer: ", 1)[1].rsplit("\nExpected: ", 1)[0]
+            expected_abstain = user.rsplit("Expected: ", 1)[-1].strip() == "abstain"
+            abstained = answer.strip() == ABSTAIN
+            cited = (not abstained) and SRC in answer
+            verdict = schema(
+                grounded=cited,
+                citations_valid=cited,
+                abstained_correctly=(abstained == expected_abstain),
+            )
+            return verdict, _usage
+
+    rows = await _score(_CtxAnswerer(), _DerivingJudge())
+    _render(rows)
+    ok = all(
+        v.abstained_correctly and (expect == "abstain" or (v.grounded and v.citations_valid))
+        for _q, expect, v in rows
     )
-    _render(await _score(answerer, judge))
-    return 0
+    return 0 if ok else 1
 
 
 async def _run_real() -> int:

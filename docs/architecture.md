@@ -43,3 +43,7 @@ graph TD;
 ```
 
 <!-- END graph -->
+
+Each terminal route above is pinned end-to-end by a scenario in
+`tests/bdd/features/00_main_functionality.feature`; per-module scenario index in
+[`docs/BDD.md`](BDD.md).

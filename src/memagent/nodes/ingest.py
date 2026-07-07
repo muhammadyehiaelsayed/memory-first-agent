@@ -6,8 +6,18 @@ the M3 sanitizer is a pass-through — M5 swaps its internals, this node is FROZ
 
 Persistence NEVER gates answering: summary failure chunks the sanitized markdown;
 store failure is caught; skip_store and the 24h freshness gate skip persistence work
-while chunking always runs so the in-hand answer keeps its context (specs/003 I2).
+while chunking always runs so the in-hand answer keeps its context (specs/003 I2). The
+whole per-doc body (sanitize -> chunk -> store) sits inside one guard so even a
+pathological page degrades to a skipped doc rather than crashing the turn.
+
+Fetched pages are processed CONCURRENTLY (asyncio.gather behind a fetch_concurrency
+semaphore, mirroring web/fetch.py): each page's summary/embed/store awaits are
+independent, so serialising them added ~N round-trips of latency on the miss path. Per-doc
+results are merged back in list order, so stored_chunk_ids / chunks / errors stay
+deterministic and one page's failure never sinks the others.
 """
+
+import asyncio
 
 from memagent.memory.chunking import chunk_markdown
 from memagent.memory.urls import url_hash
@@ -25,84 +35,120 @@ SUMMARY_SYSTEM = (
 def make_ingest_content(resources: AgentResources):
     async def ingest_content(state: dict) -> dict:
         settings = resources.settings
+        semaphore = asyncio.Semaphore(settings.fetch_concurrency)
+
+        async def _process(doc: FetchedDoc) -> dict:
+            # Per-doc accumulator; the caller merges these in list order so ordering and
+            # determinism of stored_ids/chunks/errors survive the concurrent gather.
+            out: dict = {
+                "enriched_doc": doc,
+                "chunks": [],
+                "stored_ids": [],
+                "errors": [],
+                "tokens": {},
+            }
+            if not doc.get("ok") or not doc.get("markdown"):
+                return out
+
+            async with semaphore:
+                try:
+                    # sanitize + chunk sit INSIDE the guard so a pathological page degrades to a
+                    # skipped doc, never a crashed turn (specs/003 I2). sanitize ALWAYS precedes
+                    # chunking (T3 poisoning defence; the sanitize() call is FROZEN).
+                    clean, flags = sanitize(doc["markdown"])
+                    h = url_hash(doc["url"])  # url_hash canonicalizes internally
+
+                    try:
+                        fresh = await resources.memory.is_fresh(h)
+                    except Exception:  # noqa: BLE001 — freshness is an optimization, not a gate
+                        fresh = False
+
+                    summary: str | None = None
+                    if not fresh:
+                        try:
+                            result = await resources.analytics_llm.complete(
+                                SUMMARY_SYSTEM,
+                                [
+                                    {
+                                        "role": "user",
+                                        "content": clean[: settings.summary_input_chars],
+                                    }
+                                ],
+                            )
+                            summary = result.text.strip() or None
+                            out["tokens"][f"summary:{h}"] = result.usage
+                        except Exception as exc:  # noqa: BLE001 — tolerate: chunk the markdown
+                            out["errors"].append(
+                                {
+                                    "node": "ingest_content",
+                                    "error_type": type(exc).__name__,
+                                    "detail": f"summary failed for {doc['url']}: {exc}"[:200],
+                                }
+                            )
+
+                    # Carry the sanitizer flags onto the output doc so answer_from_web can put
+                    # them in the L2 provenance header (D10 producer root).
+                    doc_out: FetchedDoc = {**doc, "summary": summary, "sanitizer_flags": flags}
+                    out["enriched_doc"] = doc_out
+
+                    # Chunking ALWAYS runs — fresh/skip_store pages still feed the in-hand answer.
+                    chunk_texts = chunk_markdown(clean, settings)
+                    out["chunks"] = [
+                        Chunk(
+                            chunk_id=f"{h}:{i}",
+                            text=t,
+                            url=doc["url"],
+                            title=doc["title"],
+                            chunk_index=i,
+                        )
+                        for i, t in enumerate(chunk_texts)
+                    ]
+
+                    if fresh or state.get("skip_store") or not chunk_texts:
+                        return out  # no persistence work: freshness gate / skip_store honoured
+
+                    try:
+                        texts = ([summary] if summary is not None else []) + chunk_texts
+                        vectors = await resources.embedder.embed(texts)
+                        stored = await resources.memory.store(
+                            page=doc_out,
+                            chunks=out["chunks"],
+                            vectors=vectors,
+                            source_query=state["query"],
+                            flags=flags,
+                        )
+                        out["stored_ids"] = stored
+                    except Exception as exc:  # noqa: BLE001 — answering never depends on persistence
+                        out["errors"].append(
+                            {
+                                "node": "ingest_content",
+                                "error_type": type(exc).__name__,
+                                "detail": f"store failed for {doc['url']}: {exc}"[:200],
+                            }
+                        )
+                except Exception as exc:  # noqa: BLE001 — sanitize/chunk failure degrades this doc
+                    out["errors"].append(
+                        {
+                            "node": "ingest_content",
+                            "error_type": type(exc).__name__,
+                            "detail": f"ingest failed for {doc.get('url')}: {exc}"[:200],
+                        }
+                    )
+            return out
+
+        results = await asyncio.gather(*(_process(d) for d in state["fetched_docs"]))
+
         enriched_docs: list[FetchedDoc] = []
         all_chunks: list[Chunk] = []
         stored_ids: list[str] = []
         errors: list[dict] = []
         tokens: dict = {}
-
-        for doc in state["fetched_docs"]:
-            if not doc.get("ok") or not doc.get("markdown"):
-                enriched_docs.append(doc)
-                continue
-
-            clean, flags = sanitize(doc["markdown"])  # ALWAYS before chunking (T3 defence)
-            h = url_hash(doc["url"])  # url_hash canonicalizes internally
-
-            try:
-                fresh = await resources.memory.is_fresh(h)
-            except Exception:  # noqa: BLE001 — freshness is an optimization, not a gate
-                fresh = False
-
-            summary: str | None = None
-            if not fresh:
-                try:
-                    result = await resources.analytics_llm.complete(
-                        SUMMARY_SYSTEM,
-                        [{"role": "user", "content": clean[: settings.summary_input_chars]}],
-                    )
-                    summary = result.text.strip() or None
-                    tokens[f"summary:{h}"] = result.usage
-                except Exception as exc:  # noqa: BLE001 — tolerate: chunk the sanitized markdown
-                    errors.append(
-                        {
-                            "node": "ingest_content",
-                            "error_type": type(exc).__name__,
-                            "detail": f"summary failed for {doc['url']}: {exc}"[:200],
-                        }
-                    )
-
-            # Carry the sanitizer flags onto the output doc so answer_from_web can put them
-            # in the L2 provenance header (D10 producer root; sanitize() call above is FROZEN).
-            doc_out: FetchedDoc = {**doc, "summary": summary, "sanitizer_flags": flags}
-            enriched_docs.append(doc_out)
-
-            # Chunking ALWAYS runs — fresh/skip_store pages still feed the in-hand answer.
-            chunk_texts = chunk_markdown(clean, settings)
-            chunks = [
-                Chunk(
-                    chunk_id=f"{h}:{i}",
-                    text=t,
-                    url=doc["url"],
-                    title=doc["title"],
-                    chunk_index=i,
-                )
-                for i, t in enumerate(chunk_texts)
-            ]
-            all_chunks.extend(chunks)
-
-            if fresh or state.get("skip_store") or not chunk_texts:
-                continue  # no persistence work: freshness gate / skip_store honoured
-
-            try:
-                texts = ([summary] if summary is not None else []) + chunk_texts
-                vectors = await resources.embedder.embed(texts)
-                stored = await resources.memory.store(
-                    page=doc_out,
-                    chunks=chunks,
-                    vectors=vectors,
-                    source_query=state["query"],
-                    flags=flags,
-                )
-                stored_ids.extend(stored)
-            except Exception as exc:  # noqa: BLE001 — answering never depends on persistence
-                errors.append(
-                    {
-                        "node": "ingest_content",
-                        "error_type": type(exc).__name__,
-                        "detail": f"store failed for {doc['url']}: {exc}"[:200],
-                    }
-                )
+        for res in results:  # merge in list order — gather preserves coroutine ordering
+            enriched_docs.append(res["enriched_doc"])
+            all_chunks.extend(res["chunks"])
+            stored_ids.extend(res["stored_ids"])
+            errors.extend(res["errors"])
+            tokens.update(res["tokens"])  # summary:{h} keys are already hash-unique
 
         update: dict = {
             "fetched_docs": enriched_docs,

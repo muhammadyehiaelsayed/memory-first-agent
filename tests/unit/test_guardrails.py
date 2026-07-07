@@ -72,6 +72,9 @@ class FakeMemory:
         self.hits = hits or []
         self.store_calls = 0
 
+    async def ensure_ready(self):
+        return None
+
     async def knn(self, vector, k):
         return self.hits
 
@@ -276,7 +279,7 @@ def test_web_source_with_flags_renders_them():  # [A] populated-web-flags
 
 def test_web_source_without_flags_renders_empty():
     wrapped = wrap_context([{"url": "https://ex.com/a", "text": "body"}], origin="web")
-    assert "sanitizer_flags: \n" in wrapped or "sanitizer_flags: " in wrapped
+    assert "sanitizer_flags: \n" in wrapped
     assert "fetched_at: " in wrapped
 
 

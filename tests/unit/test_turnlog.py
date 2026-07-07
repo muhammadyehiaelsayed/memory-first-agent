@@ -5,6 +5,7 @@ Uses tmp_path JSONL files and small inline fakes (the M6 conftest does not exist
 
 import asyncio
 import json
+import threading
 import time
 import uuid
 
@@ -150,6 +151,48 @@ def test_log_turn_never_raises_when_logger_fails(capsys):
     state = make_state("memory_hit", turn_started_at=time.perf_counter())
     updates = asyncio.run(log_turn(state))  # must not raise
     assert isinstance(updates, dict)
+
+
+def test_summary_llm_tokens_are_aggregated_into_the_record():
+    # ingest_content records per-page summary usage under hash-keyed summary:{h} entries;
+    # build_turn_record must fold them into one summary_llm bucket so web turns don't undercount.
+    state = make_state(
+        "memory_miss_web_search",
+        tokens={
+            "answer_llm": {"model": "gpt-5.4-mini", "input_tokens": 2311, "output_tokens": 402},
+            "summary:h1": {"model": "gpt-5.4-nano", "input_tokens": 500, "output_tokens": 90},
+            "summary:h2": {"model": "gpt-5.4-nano", "input_tokens": 300, "output_tokens": 60},
+        },
+    )
+    record = build_turn_record(state, Settings())
+    assert record["tokens"]["summary_llm"] == {
+        "model": "gpt-5.4-nano",
+        "input": 800,  # 500 + 300 summed across both pages
+        "output": 150,  # 90 + 60
+    }
+    # answer tokens still recorded and summary stays distinct from analytics_llm
+    assert record["tokens"]["answer_llm"]["input"] == 2311
+    assert "analytics_llm" not in record["tokens"]
+
+
+def test_no_summary_bucket_when_no_summary_tokens():
+    record = build_turn_record(make_state("memory_hit"), Settings())
+    assert "summary_llm" not in record["tokens"]
+
+
+def test_log_turn_offloads_the_blocking_write_off_the_event_loop(tmp_path):
+    main_thread = threading.get_ident()
+    seen = {}
+
+    class ThreadCapturingLogger:
+        def log(self, record: dict) -> None:
+            seen["thread"] = threading.get_ident()
+
+    log_turn = make_log_turn(Resources(ThreadCapturingLogger()))
+    state = make_state("memory_hit", turn_started_at=time.perf_counter())
+    asyncio.run(log_turn(state))
+    # asyncio.to_thread runs the sync append on a worker thread, never the event-loop thread
+    assert seen["thread"] != main_thread
 
 
 def test_real_log_turn_writes_full_record(tmp_path):

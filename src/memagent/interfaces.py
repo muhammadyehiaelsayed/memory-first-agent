@@ -35,6 +35,9 @@ class WebSearcher(Protocol):
 
 
 class MemoryStore(Protocol):
+    async def ensure_ready(self) -> None:  # idempotent index provisioning, called once at startup
+        ...
+
     async def knn(self, vector: list[float], k: int) -> list[MemoryHit]:  # RAW top-k, NO filtering
         ...
 

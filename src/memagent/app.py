@@ -119,8 +119,22 @@ class Agent:
         self.resources = resources if resources is not None else build_resources()
         self.graph = build_graph(self.resources)
         self.session_id = str(uuid4())
+        self._ready = False
+
+    async def ensure_ready(self) -> None:
+        """Provision the vector index once before the first turn (idempotent).
+
+        Covers the fresh-Redis quickstart (`make redis-up -> make run`): without it the first
+        memory_search would hit a missing index and crash. answer() calls this lazily; the
+        REPL (which drives the graph directly) calls it before its loop.
+        """
+        if self._ready:
+            return
+        await self.resources.memory.ensure_ready()
+        self._ready = True
 
     async def answer(self, query: str) -> TurnResult:
+        await self.ensure_ready()
         state = new_turn_state(self.resources.settings, self.session_id, query)
         structlog.contextvars.bind_contextvars(turn_id=state["turn_id"])
         try:

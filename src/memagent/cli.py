@@ -212,6 +212,7 @@ async def _ask(query: str, settings: Settings):
 
     configure_logging(settings)
     agent = Agent()
+    await agent.ensure_ready()
     state = new_turn_state(settings, agent.session_id, query)
     structlog.contextvars.bind_contextvars(turn_id=state["turn_id"])
     try:
@@ -256,6 +257,7 @@ async def _chat(settings: Settings) -> None:
 
     configure_logging(settings)
     agent = Agent()
+    await agent.ensure_ready()  # REPL drives the graph directly, so provision the index here
     history: list[dict] = []
     tty = sys.stdout.isatty()
     # A blank line before each prompt separates turns; colour the prompt only on a TTY.
@@ -284,7 +286,7 @@ async def _chat(settings: Settings) -> None:
         if tty:
             typer.echo("")  # breathing room between the input line and the result
         if blocked:
-            _emit(BLOCKED_BANNER, "bold red")  # guard refused — print the canned refusal
+            _emit(BLOCKED_BANNER, "bold red")  # keep the L1-blocked payload out of history
             if answer:
                 _emit(answer, markdown=True)
         elif failed:
@@ -303,9 +305,9 @@ async def _chat(settings: Settings) -> None:
             if answer:
                 _emit(answer, markdown=True)
                 _print_sources(merged.get("sources", []))
-        # A failed turn's canned apology is not a real exchange — never replay it as
+        # A blocked or failed turn is not a real exchange — never replay its canned text as
         # trusted user/assistant context on later turns.
-        if answer and not failed:
+        if answer and not blocked and not failed:
             history.append({"role": "user", "content": query})
             history.append({"role": "assistant", "content": answer})
             history[:] = history[-settings.history_max_turns * 2 :]

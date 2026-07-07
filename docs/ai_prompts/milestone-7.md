@@ -3,7 +3,7 @@
 A post-v1.0 AI-assisted pass, not one of the six planned milestones. After v1.0 shipped, the
 user asked for an end-to-end audit of the whole project; it surfaced test-coverage gaps (never
 functional bugs), which were then closed. Tooling: Claude Code (Opus 4.8) orchestrating dynamic
-subagent workflows. Result: tag `v1.1` (main `8472b11`), 114 → 144 tests, coverage 76% → 84%.
+subagent workflows. Result: tag `v1.1`, 114 → 144 tests, coverage 76% → 84%.
 
 ## 1. Instructions (user-issued, verbatim)
 
@@ -49,4 +49,4 @@ injected into the source, the guarding test was confirmed to FAIL, then reverted
 new test is itself vacuous. 144 tests pass (138 unit + 6 integration/e2e vs live `redis:8.2`);
 coverage 76% → 84% (report.py 0→96%, schema.py 43→96%, web/fetch.py filter_urls →99%,
 timing.py →100%); ruff clean; both eval harnesses exit 0. Landed on branch `m7-test-hardening`,
-branch CI green, merged `--no-ff` to main (`8472b11`), tagged `v1.1`, main CI green.
+branch CI green, merged `--no-ff` to main, tagged `v1.1`, main CI green.

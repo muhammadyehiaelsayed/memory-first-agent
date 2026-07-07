@@ -5,7 +5,7 @@ description = "Memory-first web agent: answers from Redis vector memory first, f
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "langgraph>=1.2,<2",
-    "langchain-text-splitters",
+    "langchain-text-splitters>=1,<2",
     "redis>=6.2,<7",
     "redisvl>=0.22,<0.24",
     "httpx>=0.28",
@@ -30,6 +30,7 @@ dev = [
     "respx~=0.23",
     "ruff",
     "pytest-cov",
+    "pytest-bdd>=8.1.0",
 ]
 
 [build-system]

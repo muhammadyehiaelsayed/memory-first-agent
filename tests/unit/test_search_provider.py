@@ -13,7 +13,8 @@ import httpx
 import respx
 
 from memagent.config import Settings
-from memagent.web.search import TAVILY_ENDPOINT, DdgsSearcher, TavilySearcher
+from memagent.utils.errors import SearchUnavailableError
+from memagent.web.search import TAVILY_ENDPOINT, DdgsSearcher, FallbackProvider, TavilySearcher
 
 SETTINGS = Settings(_env_file=None, wait_cap_scale=0.0, tavily_api_key="test-key")
 
@@ -53,3 +54,36 @@ def test_tavily_post_body_keeps_include_raw_content_false():
     assert body["include_raw_content"] is False  # §10 gotcha: we fetch+extract, not Tavily
     assert body["max_results"] == 3
     assert body["query"] == "redis vectors"
+
+
+@respx.mock
+def test_tavily_malformed_200_body_raises_search_unavailable():
+    # A 200 with a non-JSON body must surface as the typed error (so FallbackProvider degrades),
+    # not a raw JSONDecodeError that escapes the fallback tuple and forces a `failed` turn.
+    respx.post(TAVILY_ENDPOINT).mock(
+        return_value=httpx.Response(200, headers={"content-type": "text/html"}, text="<html>oops")
+    )
+    raised = False
+    try:
+        _run(TavilySearcher(SETTINGS).search("redis", 3))
+    except SearchUnavailableError:
+        raised = True
+    assert raised
+
+
+@respx.mock
+def test_malformed_tavily_body_falls_back_to_ddgs(monkeypatch):
+    # End-to-end: a malformed Tavily 200 must degrade to the keyless ddgs provider.
+    respx.post(TAVILY_ENDPOINT).mock(
+        return_value=httpx.Response(200, headers={"content-type": "text/html"}, text="not json")
+    )
+
+    class FakeDDGS:
+        def text(self, query, max_results):
+            return [{"href": "https://d.test/1", "title": "D", "body": "b"}]
+
+    monkeypatch.setattr("memagent.web.search.DDGS", FakeDDGS)
+    provider = FallbackProvider(SETTINGS)
+    results = _run(provider.search("redis", 2))
+    assert provider.provider_used == "ddgs"
+    assert [r["url"] for r in results] == ["https://d.test/1"]

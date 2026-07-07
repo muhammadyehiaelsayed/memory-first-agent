@@ -22,6 +22,19 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - name: Install dependencies
         run: uv sync --frozen
+      - name: Secret scan (grep-based, keyless, deterministic)
+        run: |
+          pattern='(sk-(proj-)?[A-Za-z0-9_-]{20,})|(AKIA[0-9A-Z]{16})|(-----BEGIN [A-Z ]*PRIVATE KEY-----)|(gh[pousr]_[A-Za-z0-9]{36,})'
+          if git grep -nEI "$pattern" -- ':!.env.example'; then
+            echo "::error::Potential committed secret detected (see matches above)"
+            exit 1
+          fi
+          echo "No committed secrets detected"
+      - name: Dependency vulnerability audit (pip-audit, non-blocking)
+        continue-on-error: true
+        run: |
+          uv export --frozen --no-emit-project --format requirements-txt -o requirements-audit.txt
+          uvx pip-audit -r requirements-audit.txt
       - name: Lint + format check
         run: uv run ruff check . && uv run ruff format --check .
       - name: Unit tests (keyless, no network)

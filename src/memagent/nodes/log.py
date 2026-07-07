@@ -7,6 +7,7 @@ here, because the LangGraph reducer and any outer timed() wrapper run only AFTER
 node returns — i.e. after the record has already been written.
 """
 
+import asyncio
 import time
 
 import structlog
@@ -44,7 +45,9 @@ def make_log_turn(resources):
                 "latency_ms": {**state.get("latency_ms", {}), **latency},
             }
             record = build_turn_record(merged, resources.settings)
-            resources.turn_logger.log(record)
+            # TurnLogger.log does a synchronous file append; offload it so the blocking write
+            # never stalls the event loop (matters once the graph is driven concurrently).
+            await asyncio.to_thread(resources.turn_logger.log, record)
         except Exception as exc:  # noqa: BLE001 — never raises (FR-M4-11)
             logger.error("log_turn_failed", error=type(exc).__name__, detail=str(exc))
         return updates

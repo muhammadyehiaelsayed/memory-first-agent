@@ -46,11 +46,27 @@ def build_turn_record(state: dict, settings: Settings) -> dict:
                 "input": usage["input_tokens"],
                 "output": usage["output_tokens"],
             }
+    # ingest_content records per-page summary usage under hash-keyed "summary:{h}" entries;
+    # fold them into one summary_llm bucket so web-ingest turns don't understate token cost
+    # (kept distinct from analytics_llm even though both use the nano model, so classify vs.
+    # summarization stay attributable).
+    summary_usages = [
+        u for key, u in state.get("tokens", {}).items() if key.startswith("summary:") and u
+    ]
+    if summary_usages:
+        tokens["summary_llm"] = {
+            "model": summary_usages[0]["model"],
+            "input": sum(u["input_tokens"] for u in summary_usages),
+            "output": sum(u["output_tokens"] for u in summary_usages),
+        }
     analytics = state.get("analytics")
     return {
         "turn_id": state["turn_id"],
         "ts": datetime.now(UTC).isoformat(timespec="milliseconds"),
         "session_id": state["session_id"],
+        # Plaintext query is stored verbatim next to a truncated hash: intentional for this
+        # single-user local dev log (gitignored, no rotation) — the analytics "Recent turns"
+        # view reads it. Not for a shared/multi-tenant deployment.
         "query": query,
         "query_sha256": hashlib.sha256(query.encode("utf-8")).hexdigest()[:16],
         "route": state["route"],
