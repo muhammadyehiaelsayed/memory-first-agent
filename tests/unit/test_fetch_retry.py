@@ -93,6 +93,36 @@ def test_redirect_stores_final_resolved_url():
 
 
 @respx.mock
+def test_redirect_to_private_ip_is_blocked_not_followed():
+    # SSRF guard must re-run on redirect hops: a public page that 302s to the cloud metadata
+    # endpoint must NOT be followed (filter_urls only vetted the initial URL).
+    lure = respx.get("https://lure.com/").mock(
+        return_value=httpx.Response(302, headers={"location": "http://169.254.169.254/latest/"})
+    )
+    meta = respx.get("http://169.254.169.254/latest/").mock(
+        return_value=httpx.Response(200, headers=HTML, content=_page("secrets"))
+    )
+    fetcher = HttpxPageFetcher(SETTINGS)
+    assert _run(fetcher._fetch_one("https://lure.com/")) is None  # skipped, not exfiltrated
+    assert lure.call_count == 1
+    assert meta.call_count == 0  # the private target was never requested
+
+
+@respx.mock
+def test_public_redirect_is_still_followed():
+    # The guard must not over-block: a redirect to a public host works as before.
+    respx.get("https://start.com/").mock(
+        return_value=httpx.Response(301, headers={"location": "https://final.com/p"})
+    )
+    respx.get("https://final.com/p").mock(
+        return_value=httpx.Response(200, headers=HTML, content=_page("Final"))
+    )
+    fetcher = HttpxPageFetcher(SETTINGS)
+    doc = _run(fetcher._fetch_one("https://start.com/"))
+    assert doc and doc["url"] == "https://final.com/p"
+
+
+@respx.mock
 def test_one_failed_url_does_not_stop_the_others():
     respx.get("https://a.com/").mock(
         return_value=httpx.Response(200, headers=HTML, content=_page("A"))

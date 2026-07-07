@@ -345,6 +345,36 @@ def _agent_session_id(two_agents):
 
 
 # =========================================================================== #
+# app.feature — Agent.ensure_ready (live index provisioning, idempotent)      #
+# =========================================================================== #
+@when("the agent is made ready twice against a dropped index", target_fixture="ready_probe")
+def _agent_made_ready_twice(live):
+    async def go():
+        admin = aioredis.from_url(live["settings"].redis_url)
+        try:
+            index = get_index(live["settings"], admin)
+            if await index.exists():
+                await index.delete(drop=True)  # fresh Redis: no index at all
+            agent = live["agent"]
+            await agent.ensure_ready()  # must create the index
+            first_ready = agent._ready
+            exists_after = await index.exists()
+            await agent.ensure_ready()  # idempotent: a no-op the second time
+            return {"first": first_ready, "exists": exists_after, "ready": agent._ready}
+        finally:
+            await admin.aclose()
+            await live["resources"].memory._redis.aclose()
+
+    return asyncio.run(go())
+
+
+@then("the memory index exists and readiness is a no-op the second time")
+def _agent_ready_idempotent(ready_probe):
+    assert ready_probe["exists"] is True
+    assert ready_probe["first"] is True and ready_probe["ready"] is True
+
+
+# =========================================================================== #
 # app.feature — Agent.answer (live, single-turn miss path)                    #
 # =========================================================================== #
 @given("a live agent over an empty memory index", target_fixture="live")

@@ -114,6 +114,11 @@ chronological log of every instruction:
   gate, authored by a 32-agent workflow and proven non-vacuous by a 13-agent verification
   pass with 6/6 source mutants caught; zero source changes; landed as seven phase-scoped
   commits, each independently full-suite green, tagged v1.3)
+- `docs/ai_prompts/milestone-10.md` — Milestone 10 (full-repo review + fixes; a 67-agent
+  adversarially-verified review found 0 critical / 1 high / 5 medium, of which the high
+  (fresh-Redis quickstart crash) and the two security mediums (SSRF-via-redirect, Tavily
+  malformed-200 skipping the ddgs fallback) were fixed and mutation-verified; 371 tests,
+  traceability gate at 146 functions)
 
 ## 6. What was reviewed, tested, and corrected by hand
 

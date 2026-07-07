@@ -21,6 +21,7 @@ from memagent.web.fetch import (
     HttpxPageFetcher,
     _extract_title,
     _is_private_host,
+    _is_safe_fetch_target,
     _registrable_domain,
     filter_urls,
 )
@@ -249,10 +250,13 @@ def _construct(settings):
     return probe
 
 
-@then("its httpx client follows redirects and sends the memagent User-Agent carrying a URL")
+@then(
+    "its httpx client does not auto-follow redirects and sends the memagent "
+    "User-Agent carrying a URL"
+)
 def _init_client(init_probe):
     assert init_probe["client_type"] is httpx.AsyncClient
-    assert init_probe["follow_redirects"] is True
+    assert init_probe["follow_redirects"] is False  # followed manually so each hop is re-checked
     ua = init_probe["user_agent"]
     assert ua and "memagent" in ua and "http" in ua
 
@@ -260,6 +264,51 @@ def _init_client(init_probe):
 @then("the concurrency semaphore is sized to FETCH_CONCURRENCY")
 def _init_semaphore(init_probe):
     assert init_probe["sem_value"] == init_probe["concurrency"] == 5
+
+
+# ---------------------------------------------------------------------------
+# _is_safe_fetch_target (SSRF guard re-run on every redirect hop)
+# ---------------------------------------------------------------------------
+@given(
+    "a public https URL, a loopback URL, a link-local metadata URL and a file URL",
+    target_fixture="ssrf_targets",
+)
+def _ssrf_targets():
+    return {
+        "public": "https://example.com/page",
+        "loopback": "http://127.0.0.1/admin",
+        "metadata": "http://169.254.169.254/latest/meta-data/",
+        "file": "file:///etc/passwd",
+    }
+
+
+@when("each URL is tested against the SSRF fetch-target guard", target_fixture="ssrf_verdicts")
+def _ssrf_check(ssrf_targets):
+    return {name: _is_safe_fetch_target(url) for name, url in ssrf_targets.items()}
+
+
+@then("only the public https URL is judged safe to fetch")
+def _ssrf_public_safe(ssrf_verdicts):
+    assert ssrf_verdicts["public"] is True
+
+
+@then("the loopback, metadata and file URLs are rejected")
+def _ssrf_private_rejected(ssrf_verdicts):
+    assert ssrf_verdicts["loopback"] is False
+    assert ssrf_verdicts["metadata"] is False
+    assert ssrf_verdicts["file"] is False
+
+
+@given("a URL that 302-redirects to a link-local metadata address", target_fixture="fetch_plan")
+def _plan_ssrf_redirect():
+    def register(router):
+        return router.get("https://lure.example/").mock(
+            return_value=httpx.Response(
+                302, headers={"location": "http://169.254.169.254/latest/meta-data/"}
+            )
+        )
+
+    return {"register": register, "target": "https://lure.example/"}
 
 
 # ---------------------------------------------------------------------------

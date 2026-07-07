@@ -83,6 +83,29 @@ class RedisMemoryStore:
         self._settings = settings
         self._redis = client
         self._index = get_index(settings, client)
+        self._index_ensured = False
+
+    async def ensure_ready(self) -> None:
+        """Idempotently create the web_memory index — called once at Agent startup.
+
+        `make redis-up -> make run` provisions no index, so the first knn would otherwise
+        raise RedisSearchError (a missing index, NOT a redis outage) and escape the
+        memory_search guard, crashing the documented quickstart. ensure_index is
+        exists-guarded — it never drops data and is a no-op once the index exists (checked
+        once per store lifetime). A redis outage here degrades via the typed error, exactly
+        like every other store call; a genuine schema/programming error still surfaces loudly.
+        """
+        if self._index_ensured:
+            return
+        from memagent.memory.schema import ensure_index
+
+        try:
+            await ensure_index(self._index)
+        except Exception as exc:  # noqa: BLE001 — outage -> typed error; real bugs re-raise
+            if err := _as_memory_error(exc):
+                raise err from exc
+            raise
+        self._index_ensured = True
 
     async def _io(self, coro):
         """Await a redis coroutine, translating a (possibly wrapped) outage to the typed error.

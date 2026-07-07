@@ -33,6 +33,7 @@ JS_ONLY_DENYLIST = {
     "tiktok.com",
 }
 USER_AGENT = "memagent/1.0 (+https://github.com/muhammadyehiaelsayed/memory-first-agent)"
+MAX_REDIRECTS = 5
 
 _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 
@@ -56,6 +57,18 @@ def _is_private_host(host: str) -> bool:
     return (
         ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_unspecified
     )
+
+
+def _is_safe_fetch_target(url: str) -> bool:
+    """Scheme + private-host SSRF check for a single URL.
+
+    filter_urls vets only the initial search-result URLs; this is re-run on every redirect
+    hop (the fetcher no longer auto-follows) so a public page cannot 302 the fetcher into
+    http://169.254.169.254/... or a loopback/internal service.
+    """
+    parts = urlsplit(url)
+    host = parts.hostname or ""
+    return parts.scheme.lower() in ALLOWED_SCHEMES and bool(host) and not _is_private_host(host)
 
 
 def filter_urls(urls: list[str], settings: Settings) -> list[str]:
@@ -92,7 +105,7 @@ class HttpxPageFetcher:
     def __init__(self, settings: Settings):
         self._settings = settings
         self._client = httpx.AsyncClient(
-            follow_redirects=True,
+            follow_redirects=False,  # followed manually so each hop is re-checked for SSRF
             timeout=httpx.Timeout(
                 connect=settings.connect_timeout_s,
                 read=settings.read_timeout_s,
@@ -119,26 +132,38 @@ class HttpxPageFetcher:
             return None
 
     async def _fetch_one(self, url: str) -> FetchedDoc | None:
-        async with self._client.stream("GET", url) as response:
-            response.raise_for_status()
-            ctype = response.headers.get("content-type", "").split(";")[0].strip().lower()
-            if ctype not in ACCEPTED_CONTENT_TYPES:
-                return None
-            body = bytearray()
-            async for part in response.aiter_bytes():
-                body.extend(part)
-                if len(body) > self._settings.fetch_max_bytes:
-                    # Oversize: skip the page entirely — never truncate-and-keep.
+        current = url
+        for _ in range(MAX_REDIRECTS + 1):
+            async with self._client.stream("GET", current) as response:
+                if response.is_redirect:
+                    location = response.headers.get("location", "")
+                    target = str(response.url.join(location)) if location else ""
+                    if not target or not _is_safe_fetch_target(target):
+                        logger.warning("redirect_blocked", frm=current, to=target or "(none)")
+                        return None
+                    current = target
+                    continue
+                response.raise_for_status()
+                ctype = response.headers.get("content-type", "").split(";")[0].strip().lower()
+                if ctype not in ACCEPTED_CONTENT_TYPES:
                     return None
-            html = body.decode(response.encoding or "utf-8", errors="replace")
-            markdown = to_markdown(html, self._settings)
-            if markdown is None:
-                return None
-            final_url = str(response.url)  # post-redirect URL is the stored identity
-            return FetchedDoc(
-                url=final_url,
-                title=_extract_title(html, fallback=final_url),
-                markdown=markdown,
-                summary=None,
-                ok=True,
-            )
+                body = bytearray()
+                async for part in response.aiter_bytes():
+                    body.extend(part)
+                    if len(body) > self._settings.fetch_max_bytes:
+                        # Oversize: skip the page entirely — never truncate-and-keep.
+                        return None
+                html = body.decode(response.encoding or "utf-8", errors="replace")
+                markdown = to_markdown(html, self._settings)
+                if markdown is None:
+                    return None
+                final_url = str(response.url)  # post-redirect URL is the stored identity
+                return FetchedDoc(
+                    url=final_url,
+                    title=_extract_title(html, fallback=final_url),
+                    markdown=markdown,
+                    summary=None,
+                    ok=True,
+                )
+        logger.warning("too_many_redirects", url=url)
+        return None

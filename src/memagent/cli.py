@@ -212,6 +212,7 @@ async def _ask(query: str, settings: Settings):
 
     configure_logging(settings)
     agent = Agent()
+    await agent.ensure_ready()
     state = new_turn_state(settings, agent.session_id, query)
     structlog.contextvars.bind_contextvars(turn_id=state["turn_id"])
     try:
@@ -256,6 +257,7 @@ async def _chat(settings: Settings) -> None:
 
     configure_logging(settings)
     agent = Agent()
+    await agent.ensure_ready()  # REPL drives the graph directly, so provision the index here
     history: list[dict] = []
     tty = sys.stdout.isatty()
     # A blank line before each prompt separates turns; colour the prompt only on a TTY.

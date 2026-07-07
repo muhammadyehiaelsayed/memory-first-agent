@@ -57,6 +57,13 @@ Feature: Redis vector memory store (src/memagent/memory/store.py)
     And a successful guarded operation returns its value unchanged
     And a Redis ResponseError from a guarded operation is left to surface untranslated
 
+  # covers: memagent.memory.store.RedisMemoryStore.ensure_ready
+  Scenario: A fresh Redis with no index is provisioned on first use instead of crashing
+    Given a Redis instance from which the web_memory index has been dropped
+    When the store is asked to ensure the index is ready and is then queried
+    Then the index did not exist beforehand but exists afterwards
+    And the nearest-neighbour query returns an empty list rather than raising
+
   # source: milestone-2-memory-path.md :: KNN returns raw top-k with similarity attached
   # covers: memagent.memory.store.RedisMemoryStore.knn
   Scenario: A stored chunk is found again with its similarity attached at the 0.70 hit boundary

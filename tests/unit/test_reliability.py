@@ -187,6 +187,9 @@ class FakeMemory:
         self.down = down
         self.store_calls = 0
 
+    async def ensure_ready(self):
+        return None
+
     async def knn(self, vector, k):
         if self.down:
             raise MemoryUnavailableError("redis down")

@@ -38,6 +38,12 @@ Feature: The Agent facade assembles resources and answers turns (src/memagent/ap
     Then it holds a compiled, invokable graph and the resources it was given
     And it has a non-empty session id distinct from a second agent's
 
+  # covers: memagent.app.Agent.ensure_ready
+  Scenario: The agent provisions its memory index once at startup and is idempotent
+    Given a live agent over an empty memory index
+    When the agent is made ready twice against a dropped index
+    Then the memory index exists and readiness is a no-op the second time
+
   # source: milestone-6-e2e-evals-delivery.md :: Turn 1 misses memory and searches the web
   # covers: memagent.app.Agent.answer
   Scenario: Answering a novel question misses memory, reaches the web and cites its sources

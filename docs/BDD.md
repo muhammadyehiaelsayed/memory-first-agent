@@ -1,9 +1,8 @@
 # BDD Scenarios — Behavior Coverage for Every Python Function
 
 The agent's behavior is specified as executable Gherkin. **Every module-level
-function and class method in `src/` and `scripts/` (142 functions) has its own
-BDD scenario** (210 scenarios across 45 feature files — 215 pytest items once
-the three Scenario Outlines expand their examples), each derived from
+function and class method in `src/` and `scripts/` (146 functions) has its own
+BDD scenario** (215 scenarios across 45 feature files), each derived from
 the root feature `tests/bdd/features/00_main_functionality.feature` — the main
 functionality (memory-first answering over the five routes: `memory_hit`,
 `memory_miss_web_search`, `degraded_web`, `blocked`, `failed`).
@@ -46,17 +45,17 @@ of the suite — no separate BDD runner.
 | `analytics_classify.feature` | `src/memagent/analytics/classify.py` | "Log exactly one analytics record for every turn" | 6 | `tests/bdd/test_bdd_analytics.py` |
 | `analytics_report.feature` | `src/memagent/analytics/report.py` | "Log exactly one analytics record for every turn" | 4 | `tests/bdd/test_bdd_analytics.py` |
 | `analytics_turnlog.feature` | `src/memagent/analytics/turnlog.py` | "Log exactly one analytics record for every turn" | 3 | `tests/bdd/test_bdd_analytics.py` |
-| `app.feature` | `src/memagent/app.py` | "Fall back to the web and ingest what was found on a memory miss" | 5 | `tests/bdd/test_bdd_orchestration.py` |
+| `app.feature` | `src/memagent/app.py` | "Fall back to the web and ingest what was found on a memory miss" | 6 | `tests/bdd/test_bdd_orchestration.py` |
 | `cli.feature` | `src/memagent/cli.py` | "Answer from memory when a similar question was seen before" | 23 | `tests/bdd/test_bdd_cli.py` |
 | `config.feature` | `src/memagent/config.py` | "Answer from memory when a similar question was seen before" | 4 | `tests/bdd/test_bdd_contracts.py` |
 | `graph.feature` | `src/memagent/graph.py` | "Block malicious input at the guard before any model call" | 2 | `tests/bdd/test_bdd_orchestration.py` |
-| `interfaces.feature` | `src/memagent/interfaces.py` | "Answer from memory when a similar question was seen before" | 9 | `tests/bdd/test_bdd_contracts.py` |
+| `interfaces.feature` | `src/memagent/interfaces.py` | "Answer from memory when a similar question was seen before" | 10 | `tests/bdd/test_bdd_contracts.py` |
 | `llm_clients.feature` | `src/memagent/llm/clients.py` | "Answer from memory when a similar question was seen before" | 8 | `tests/bdd/test_bdd_llm_clients.py` |
 | `llm_prompts.feature` | `src/memagent/llm/prompts.py` | "Answer from memory when a similar question was seen before" | 5 | `tests/bdd/test_bdd_llm_prompts.py` |
 | `main_entry.feature` | `src/memagent/__main__.py` | "Answer from memory when a similar question was seen before" | 1 | `tests/bdd/test_bdd_contracts.py` |
 | `memory_chunking.feature` | `src/memagent/memory/chunking.py` | "Fall back to the web and ingest what was found on a memory miss" | 4 | `tests/bdd/test_bdd_memory_support.py` |
 | `memory_schema.feature` | `src/memagent/memory/schema.py` | "Answer from memory when a similar question was seen before" | 5 | `tests/bdd/test_bdd_memory_support.py` |
-| `memory_store.feature` | `src/memagent/memory/store.py` | "Answer from memory when a similar question was seen before" | 9 | `tests/bdd/test_bdd_memory_store.py` |
+| `memory_store.feature` | `src/memagent/memory/store.py` | "Answer from memory when a similar question was seen before" | 10 | `tests/bdd/test_bdd_memory_store.py` |
 | `memory_urls.feature` | `src/memagent/memory/urls.py` | "Fall back to the web and ingest what was found on a memory miss" | 2 | `tests/bdd/test_bdd_memory_support.py` |
 | `nodes_answer.feature` | `src/memagent/nodes/answer.py` | "Answer from memory when a similar question was seen before" | 5 | `tests/bdd/test_bdd_nodes_memory_path.py` |
 | `nodes_embed.feature` | `src/memagent/nodes/embed.py` | "Report failure when the query cannot be embedded" | 2 | `tests/bdd/test_bdd_nodes_memory_path.py` |
@@ -83,13 +82,13 @@ of the suite — no separate BDD runner.
 | `utils_errors.feature` | `src/memagent/utils/errors.py` | "Degrade gracefully when search succeeds but every page fetch fails" | 1 | `tests/bdd/test_bdd_utils.py` |
 | `utils_reliability.feature` | `src/memagent/utils/reliability.py` | "Report failure when the query cannot be embedded" | 8 | `tests/bdd/test_bdd_utils.py` |
 | `utils_timing.feature` | `src/memagent/utils/timing.py` | "Log exactly one analytics record for every turn" | 1 | `tests/bdd/test_bdd_utils.py` |
-| `web_fetch.feature` | `src/memagent/web/fetch.py` | "Fall back to the web and ingest what was found on a memory miss" | 14 | `tests/bdd/test_bdd_web_fetch.py` |
+| `web_fetch.feature` | `src/memagent/web/fetch.py` | "Fall back to the web and ingest what was found on a memory miss" | 16 | `tests/bdd/test_bdd_web_fetch.py` |
 | `web_search.feature` | `src/memagent/web/search.py` | "Fall back to the web and ingest what was found on a memory miss" | 8 | `tests/bdd/test_bdd_web_search.py` |
 | `web_to_markdown.feature` | `src/memagent/web/to_markdown.py` | "Fall back to the web and ingest what was found on a memory miss" | 5 | `tests/bdd/test_bdd_web_fetch.py` |
 
 ## Function → scenario traceability matrix
 
-200 coverage declarations for 142 functions.
+205 coverage declarations for 146 functions.
 
 | Function | Scenario | Feature file |
 |---|---|---|
@@ -110,6 +109,7 @@ of the suite — no separate BDD runner.
 | `memagent.analytics.turnlog.build_turn_record` | A web-route record reports provider, results, fetched pages, and only persisted chunks | `analytics_turnlog.feature` |
 | `memagent.app.Agent.__init__` | Constructing the agent compiles the graph once and mints a session id | `app.feature` |
 | `memagent.app.Agent.answer` | Answering a novel question misses memory, reaches the web and cites its sources | `app.feature` |
+| `memagent.app.Agent.ensure_ready` | The agent provisions its memory index once at startup and is idempotent | `app.feature` |
 | `memagent.app.build_resources` | Building resources assembles the real clients without a live connection | `app.feature` |
 | `memagent.app.configure_logging` | Operational logging is wired to stderr so stdout stays pipe-clean | `app.feature` |
 | `memagent.app.new_turn_state` | A fresh turn starts allowed, thresholded from settings and unrouted until proven | `app.feature` |
@@ -141,6 +141,7 @@ of the suite — no separate BDD runner.
 | `memagent.interfaces.ChatLLM.complete` | A chat model returns generated text alongside a token-usage record | `interfaces.feature` |
 | `memagent.interfaces.ChatLLM.parse` | A chat model parses a prompt into a typed schema instance with usage | `interfaces.feature` |
 | `memagent.interfaces.Embedder.embed` | An embedder maps a batch of texts to fixed-width vectors | `interfaces.feature` |
+| `memagent.interfaces.MemoryStore.ensure_ready` | A memory store can be asked to provision itself before first use | `interfaces.feature` |
 | `memagent.interfaces.MemoryStore.is_fresh` | A store reports whether a URL hash was seen within the freshness window | `interfaces.feature` |
 | `memagent.interfaces.MemoryStore.knn` | A memory store returns the raw nearest neighbours without applying the threshold | `interfaces.feature` |
 | `memagent.interfaces.MemoryStore.store` | Storing a page's chunks returns one identifier per persisted chunk | `interfaces.feature` |
@@ -174,6 +175,7 @@ of the suite — no separate BDD runner.
 | `memagent.memory.schema.wipe_index` | Wiping drops the index and its metadata hashes then recreates it empty | `memory_schema.feature` |
 | `memagent.memory.store.RedisMemoryStore.__init__` | Constructing the store opens the shared web_memory index | `memory_store.feature` |
 | `memagent.memory.store.RedisMemoryStore._io` | A Redis outage during an I/O op is translated while bugs surface loudly | `memory_store.feature` |
+| `memagent.memory.store.RedisMemoryStore.ensure_ready` | A fresh Redis with no index is provisioned on first use instead of crashing | `memory_store.feature` |
 | `memagent.memory.store.RedisMemoryStore.is_fresh` | The freshness gate is inclusive-inside and exclusive at the 24h boundary | `memory_store.feature` |
 | `memagent.memory.store.RedisMemoryStore.knn` | A stored chunk is found again with its similarity attached at the 0.70 hit boundary | `memory_store.feature` |
 | `memagent.memory.store.RedisMemoryStore.store` | Ingested page content round-trips and re-ingestion prunes stale chunks | `memory_store.feature` |
@@ -238,10 +240,11 @@ of the suite — no separate BDD runner.
 | `memagent.utils.reliability.llm_retry` | A transient LLM call retries to success then an auth failure fast-fails as a typed error | `utils_reliability.feature` |
 | `memagent.utils.reliability.tavily_retry` | Auth failures fall through to the fallback while exhausted search retries raise the typed error | `utils_reliability.feature` |
 | `memagent.utils.timing.timed` | A stage timing is measured and merged without clobbering node-supplied timings | `utils_timing.feature` |
-| `memagent.web.fetch.HttpxPageFetcher.__init__` | The fetcher is wired for redirects, bounded concurrency and an honest User-Agent | `web_fetch.feature` |
+| `memagent.web.fetch.HttpxPageFetcher.__init__` | The fetcher handles redirects manually, with bounded concurrency and an honest User-Agent | `web_fetch.feature` |
 | `memagent.web.fetch.HttpxPageFetcher._fetch_guarded` | A per-URL failure is swallowed into a skipped page | `web_fetch.feature` |
 | `memagent.web.fetch.HttpxPageFetcher._fetch_one` | A hard 404 raises a page-fetch error without retrying | `web_fetch.feature` |
 | `memagent.web.fetch.HttpxPageFetcher._fetch_one` | A non-HTML content type is skipped | `web_fetch.feature` |
+| `memagent.web.fetch.HttpxPageFetcher._fetch_one` | A page that redirects to a private address is not followed | `web_fetch.feature` |
 | `memagent.web.fetch.HttpxPageFetcher._fetch_one` | A redirect chain stores the final resolved URL | `web_fetch.feature` |
 | `memagent.web.fetch.HttpxPageFetcher._fetch_one` | A transient read timeout is retried and then the page succeeds | `web_fetch.feature` |
 | `memagent.web.fetch.HttpxPageFetcher._fetch_one` | An oversize body is abandoned rather than truncated | `web_fetch.feature` |
@@ -249,6 +252,7 @@ of the suite — no separate BDD runner.
 | `memagent.web.fetch.HttpxPageFetcher.fetch` | One failing URL does not stop the others on a memory miss | `web_fetch.feature` |
 | `memagent.web.fetch._extract_title` | The page title is extracted, unescaped, whitespace-collapsed and bounded | `web_fetch.feature` |
 | `memagent.web.fetch._is_private_host` | Private, loopback and link-local hosts are recognised | `web_fetch.feature` |
+| `memagent.web.fetch._is_safe_fetch_target` | The SSRF target check rejects private hosts and non-HTTP schemes but accepts public URLs | `web_fetch.feature` |
 | `memagent.web.fetch._registrable_domain` | The registrable domain collapses to its last two labels | `web_fetch.feature` |
 | `memagent.web.fetch.filter_urls` | Denylisted domains are dropped and each domain is capped for diversity | `web_fetch.feature` |
 | `memagent.web.fetch.filter_urls` | Unsafe schemes and private hosts are removed by the URL filter | `web_fetch.feature` |

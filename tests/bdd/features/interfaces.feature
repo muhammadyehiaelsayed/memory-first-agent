@@ -47,6 +47,13 @@ Feature: Dependency-injection Protocols define the collaborator contracts (src/m
     And the snippet is mapped from the provider content field
     And the WebSearcher contract declares search as an async method
 
+  # covers: memagent.interfaces.MemoryStore.ensure_ready
+  Scenario: A memory store can be asked to provision itself before first use
+    Given a conforming in-memory store
+    When its index provisioning is ensured
+    Then the provisioning completes without error
+    And the MemoryStore contract declares ensure_ready as an async method
+
   # covers: memagent.interfaces.MemoryStore.knn
   Scenario: A memory store returns the raw nearest neighbours without applying the threshold
     Given an in-memory store holding hits both above and below the similarity threshold

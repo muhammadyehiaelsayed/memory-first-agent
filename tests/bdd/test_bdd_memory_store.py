@@ -323,6 +323,48 @@ def _knn_empty(ctx):
 # ========================================================================== #
 # Scenario: store round-trip + upsert pruning (LIVE redis)
 # ========================================================================== #
+@given("a Redis instance from which the web_memory index has been dropped", target_fixture="ctx")
+def _given_dropped_index(settings, fake_embedder, redis_url):
+    return {"settings": settings, "embedder": fake_embedder}
+
+
+@when(
+    "the store is asked to ensure the index is ready and is then queried",
+    target_fixture="ensure_res",
+)
+def _ensure_then_query(ctx):
+    settings = ctx["settings"]
+    embedder = ctx["embedder"]
+
+    async def _flow():
+        client = aioredis.from_url(settings.redis_url)
+        try:
+            index = get_index(settings, client)
+            if await index.exists():
+                await index.delete(drop=True)  # simulate a truly fresh Redis (no index at all)
+            existed_before = await index.exists()
+            store = RedisMemoryStore(settings, client)
+            await store.ensure_ready()  # the fix: provision instead of crashing on first knn
+            existed_after = await index.exists()
+            hits = await store.knn((await embedder.embed(["anything"]))[0], k=3)
+            return {"before": existed_before, "after": existed_after, "hits": hits}
+        finally:
+            await client.aclose()
+
+    return asyncio.run(_flow())
+
+
+@then("the index did not exist beforehand but exists afterwards")
+def _ensure_created(ensure_res):
+    assert ensure_res["before"] is False
+    assert ensure_res["after"] is True
+
+
+@then("the nearest-neighbour query returns an empty list rather than raising")
+def _ensure_query_ok(ensure_res):
+    assert ensure_res["hits"] == []
+
+
 @given("an empty web_memory index", target_fixture="ctx")
 def _given_empty_index(settings, fake_embedder, redis_url):
     return {"settings": settings, "embedder": fake_embedder}

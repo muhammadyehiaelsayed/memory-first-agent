@@ -1,9 +1,9 @@
 # Threat model (M5)
 
 The memory-first web agent ingests untrusted web content and stores it for reuse, so the
-threat model centres on prompt injection and memory poisoning. Four threats are defended;
+threat model centres on prompt injection and memory poisoning. Five threats are defended;
 the mitigations are the three guardrail layers (L1 input screen, L2 instruction/data
-separation, L3 sanitize-before-store) plus an output defence.
+separation, L3 sanitize-before-store) plus an output defence and a fetch-side SSRF guard.
 
 | ID | Threat | Mitigation |
 |----|--------|------------|
@@ -11,6 +11,7 @@ separation, L3 sanitize-before-store) plus an output defence.
 | T2 | Indirect injection inside fetched pages | **L2** data/instruction separation (`llm/prompts.py`): retrieved content is quoted DATA inside `<untrusted_context>` with per-source provenance headers, tag-breakout escaped, the user question placed last; **L3** sanitizer neutralises injection phrases in the fetched text before it is ever used. |
 | T3 | **Memory poisoning** — injected content stored in Redis and replayed as trusted context on future hits (highest-value threat) | **L3 sanitize-before-store** (`security/sanitizer.py`): fetched content is neutralised **once, between markdown conversion and chunking**, so stored text is always sanitised text. Injection phrases become the literal marker `[removed-suspicious-instruction]` (never silently deleted). `sanitizer_flags` and a `content_sha256` fingerprint are persisted per chunk and re-attached in the L2 provenance header on every memory hit, so poisoned-but-neutralised content always replays as flagged quoted data. |
 | T4 | Exfiltration / unsafe output (attacker URLs, tracker images) | The L2 prompt rule "cite only URLs that appear in a `source_url` field" plus a markdown-image strip applied to the produced answer text in both answer nodes, so a tracker/exfil image can never reach output even if the model emits one. |
+| T5 | **SSRF via fetched URLs** — a search result (or a page it redirects to) pointing at cloud metadata / loopback / internal services | Fetch-side guard (`web/fetch.py`): `filter_urls` drops non-http(s) schemes and private/loopback/link-local IP literals from search results, and the fetcher follows redirects **manually** (`follow_redirects=False`, capped at `MAX_REDIRECTS`), re-running `_is_safe_fetch_target` on **every hop** so a public page cannot 302 the fetcher into `169.254.169.254`/loopback. DNS resolution of hostnames is out of scope (documented limitation). |
 
 Every mitigation and degradation path above is pinned by executable BDD scenarios
 (`tests/bdd/features/security_*.feature`, `nodes_guard.feature`, `utils_reliability.feature`;

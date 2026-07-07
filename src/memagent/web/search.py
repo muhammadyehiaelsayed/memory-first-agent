@@ -48,7 +48,13 @@ class TavilySearcher:
 
     async def search(self, query: str, k: int) -> list[SearchResult]:
         response = await self._post(query, k)
-        results = response.json().get("results", [])
+        try:
+            results = response.json().get("results", [])
+        except (ValueError, AttributeError) as exc:
+            # A 200 with a malformed/non-object body (upstream proxy HTML, truncation, schema
+            # drift) is a Tavily failure, not a hard stop: surface the typed error so
+            # FallbackProvider degrades to the keyless ddgs provider (availability first).
+            raise SearchUnavailableError(f"tavily returned an unparseable body: {exc}") from exc
         return [
             SearchResult(
                 url=r.get("url", ""),

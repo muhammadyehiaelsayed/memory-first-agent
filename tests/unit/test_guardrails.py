@@ -72,6 +72,9 @@ class FakeMemory:
         self.hits = hits or []
         self.store_calls = 0
 
+    async def ensure_ready(self):
+        return None
+
     async def knn(self, vector, k):
         return self.hits
 

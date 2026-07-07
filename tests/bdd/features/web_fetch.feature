@@ -54,11 +54,24 @@ Feature: Bounded, guarded page fetching for the web branch (src/memagent/web/fet
 
   # source: milestone-3-web-pipeline.md :: Requests carry an honest User-Agent with the repo link
   # covers: memagent.web.fetch.HttpxPageFetcher.__init__
-  Scenario: The fetcher is wired for redirects, bounded concurrency and an honest User-Agent
+  Scenario: The fetcher handles redirects manually, with bounded concurrency and an honest User-Agent
     Given the default web settings
     When a page fetcher is constructed
-    Then its httpx client follows redirects and sends the memagent User-Agent carrying a URL
+    Then its httpx client does not auto-follow redirects and sends the memagent User-Agent carrying a URL
     And the concurrency semaphore is sized to FETCH_CONCURRENCY
+
+  # covers: memagent.web.fetch._is_safe_fetch_target
+  Scenario: The SSRF target check rejects private hosts and non-HTTP schemes but accepts public URLs
+    Given a public https URL, a loopback URL, a link-local metadata URL and a file URL
+    When each URL is tested against the SSRF fetch-target guard
+    Then only the public https URL is judged safe to fetch
+    And the loopback, metadata and file URLs are rejected
+
+  # covers: memagent.web.fetch.HttpxPageFetcher._fetch_one
+  Scenario: A page that redirects to a private address is not followed
+    Given a URL that 302-redirects to a link-local metadata address
+    When the page is fetched
+    Then the page is skipped and yields no document
 
   # source: milestone-3-web-pipeline.md :: A single failing URL is skipped and the rest continue
   # covers: memagent.web.fetch.HttpxPageFetcher.fetch

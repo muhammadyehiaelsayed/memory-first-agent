@@ -98,6 +98,10 @@ class InMemoryStore:
         self._hits = hits or []
         self._fresh = fresh or set()
         self.stored_ids: list[str] = []
+        self.ensure_calls = 0
+
+    async def ensure_ready(self) -> None:
+        self.ensure_calls += 1
 
     async def knn(self, vector: list[float], k: int) -> list[dict]:
         ordered = sorted(self._hits, key=lambda h: h["similarity"], reverse=True)
@@ -425,6 +429,23 @@ def _search_snippet(search_out):
         "snippet two",
         "snippet three",
     ]
+
+
+# --- MemoryStore.ensure_ready ---
+@given("a conforming in-memory store", target_fixture="ensure_store")
+def _ensure_store():
+    return InMemoryStore()
+
+
+@when("its index provisioning is ensured", target_fixture="ensure_out")
+def _do_ensure(ensure_store):
+    asyncio.run(ensure_store.ensure_ready())
+    return ensure_store
+
+
+@then("the provisioning completes without error")
+def _ensure_ok(ensure_out):
+    assert ensure_out.ensure_calls == 1
 
 
 # --- MemoryStore.knn ---

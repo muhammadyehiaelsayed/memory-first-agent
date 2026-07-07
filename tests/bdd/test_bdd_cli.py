@@ -105,6 +105,9 @@ class _FakeAskAgent:
         self.session_id = "sess-test"
         self.graph = _FakeAskGraph()
 
+    async def ensure_ready(self):
+        return None
+
 
 class _RecordingStatus:
     """Captures the last spinner label _advance_status set."""
@@ -136,6 +139,9 @@ class _FakeChatAgent:
         self.session_id = "sess-test"
         self.graph = _FakeChatGraph()
 
+    async def ensure_ready(self):
+        return None
+
 
 class _FakeFailingChatGraph:
     """Memory hits, but the answer LLM fails -> route flips to failed + the apology.
@@ -155,6 +161,9 @@ class _FakeFailingChatAgent:
     def __init__(self, resources=None):
         self.session_id = "sess-test"
         self.graph = _FakeFailingChatGraph()
+
+    async def ensure_ready(self):
+        return None
 
 
 def _make_input(values):
