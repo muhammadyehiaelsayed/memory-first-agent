@@ -29,6 +29,11 @@ CLI subcommand — the Make target name differs from the CLI command name), `mak
 **Zero-key path** (matches CI, no API keys / no internet): `make test` (also needs no Redis) and
 `python scripts/eval_lifecycle.py --mock` (needs a local `redis:8.2` — `make redis-up`).
 
+`make test` runs 355 keyless tests (362 total with the redis-backed integration/e2e set): unit
+tests plus a 210-scenario BDD layer (pytest-bdd) with one feature file per module. Every one of
+the 142 module-level functions carries a `# covers:` declaration, enforced bidirectionally by a
+traceability gate — index and matrix in [`docs/BDD.md`](docs/BDD.md).
+
 **No uv?** `pip install -e ".[dev]"` inside a Python 3.12 venv works as a fallback
 (uv + the committed `uv.lock` is the reproducible path).
 
@@ -168,7 +173,9 @@ See [`DECISIONS.md`](DECISIONS.md) for the standing locked-decision / anti-churn
 A captured miss→ingest→hit session lives in
 [`docs/demo_transcript.md`](docs/demo_transcript.md) (re-capture on a production key via
 `python scripts/capture_demo.py`). The same behaviour is proven keylessly in CI by
-`tests/e2e/test_lifecycle.py` and `scripts/eval_lifecycle.py --mock`.
+`tests/e2e/test_lifecycle.py`, `scripts/eval_lifecycle.py --mock`, and the per-route scenarios
+in `tests/bdd/features/00_main_functionality.feature` (one BDD scenario per route, including
+the degraded and blocked paths).
 
 ## AI assistance
 

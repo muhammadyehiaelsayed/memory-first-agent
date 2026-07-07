@@ -21,10 +21,12 @@ analyze → implement) with a human decision at every clarification gate. Code i
 milestone by milestone against reviewed specs; every milestone ends with a Definition of
 Done sweep and this file's per-milestone append.
 
-Two later AI-assisted passes hardened the delivery beyond the six planned milestones — M7
-(test-coverage hardening → `v1.1`) and M8 (delivery-readiness review + fixes → `v1.2`). Each
-was driven by an adversarial subagent workflow that audited the shipped repo, reported findings
-to the user *before* any change, and was logged the same append-only way (§5).
+Three later AI-assisted passes hardened the delivery beyond the six planned milestones — M7
+(test-coverage hardening → `v1.1`), M8 (delivery-readiness review + fixes → `v1.2`), and M9
+(executable BDD scenarios for every function → `v1.3`). M7/M8 were driven by adversarial
+subagent workflows that audited the shipped repo and reported findings to the user *before*
+any change; M9 authored the BDD layer via a 32-agent workflow with a 13-agent pre-commit
+verification pass — all logged the same append-only way (§5).
 
 ## 3. Per-component provenance table
 
@@ -61,6 +63,7 @@ to the user *before* any change, and was logged the same append-only way (§5).
 | `tests/conftest.py`, `tests/integration/`, `tests/e2e/`, `scripts/eval_lifecycle.py`, `scripts/eval_grounding.py`, CI, README/docs | AI-generated, human-reviewed | integration + e2e + eval harnesses + CI green + docs; repo-probe / plan-recheck / impl-verify workflows caught defects before coding (M6, v1.0) |
 | `tests/unit/{test_url_filter,test_search_provider,test_ingest,test_report,test_clients,test_m1_contracts,test_answer_context,test_timing}.py` + test edits | AI-generated, human-reviewed | 18 audited test-coverage gaps closed, mutation-verified 14/14; dead `_LLM_FAST_FAIL_STATUS` removed (M7, v1.1) |
 | L3 sanitizer HIGH-only scope, `doc:{h}` meta TTL, constants→`Settings`, `scripts/seed_memory.py` fix, stale-docstring polish | AI-generated, human-reviewed | delivery-readiness review (36-agent workflow); 23 findings fixed, 3 behavior changes mutation-verified (M8, v1.2) |
+| `tests/bdd/` (45 features, 18 bindings, `test_bdd_traceability.py` gate), `docs/BDD.md`, `pytest-bdd>=8.1.0` dep | AI-generated, human-reviewed | 210 scenarios covering all 142 functions, mutation-verified 6/6; zero source changes (M9, v1.3) |
 
 ## 4. Curated highlights (3-6 representative prompts)
 
@@ -109,7 +112,8 @@ chronological log of every instruction:
 - `docs/ai_prompts/milestone-9.md` — Milestone 9 (executable BDD scenarios → v1.3; 45 feature
   files / 210 scenarios covering all 142 functions, enforced by an AST-based traceability
   gate, authored by a 32-agent workflow and proven non-vacuous by a 13-agent verification
-  pass with 6/6 source mutants caught; zero source changes)
+  pass with 6/6 source mutants caught; zero source changes; landed as seven phase-scoped
+  commits, each independently full-suite green, tagged v1.3)
 
 ## 6. What was reviewed, tested, and corrected by hand
 
@@ -119,7 +123,8 @@ chronological log of every instruction:
 - `FT.INFO` observation: redisvl registers the FT.CREATE prefix as `chunk` (bare, without the
   separator); keys are still `chunk:<id>` and the `doc:*` meta prefix stays un-indexed — the
   double-colon trap the plan warned about is confirmed avoided.
-- Field-count truth-check: `Settings` has 32 fields (design docs briefly claimed 33; corrected).
+- Field-count truth-check: `Settings` had 32 fields at M1 (design docs briefly claimed 33;
+  corrected) — now 37 after M8 moved tuning constants into `Settings`.
 - M3 live inspection caught that `wipe-memory` left the non-indexed `doc:*` freshness
   metas behind — harmless before M3, but it would have made the freshness gate silently
   skip re-ingestion after a wipe. Fixed in `wipe_index` and re-verified (0 keys post-wipe).

@@ -4,7 +4,9 @@ A post-v1.2 AI-assisted pass. The user asked for full BDD coverage: every Python
 every function under its own Gherkin scenario, derived from the main functionality, mined
 from the planning specs' existing scenarios, executable and passing — with zero changes to
 source code. Tooling: Claude Code (Fable 5 orchestrator + Opus 4.8 authoring subagents +
-Fable 5 verification subagents), dynamic workflows. Result: tag `v1.3`.
+Fable 5 verification subagents), dynamic workflows. Result: seven phase-scoped commits (BDD
+M1–M6 scope + traceability gate/docs), each independently full-suite green, tagged `v1.3` and
+merged `--no-ff` to main as part of the final-polish merge.
 
 ## 1. Instructions (user-issued, verbatim)
 
@@ -36,7 +38,7 @@ Fable 5 verification subagents), dynamic workflows. Result: tag `v1.3`.
   zero-function modules with top-level behavior need `# covers-module:`.
 - `docs/BDD.md` — generated index: run instructions, layout, per-feature table, and the
   full function→scenario traceability matrix.
-- Only pre-existing files touched: `pyproject.toml` + `uv.lock` (added `pytest-bdd~=8.1`
+- Only pre-existing files touched: `pyproject.toml` + `uv.lock` (added `pytest-bdd>=8.1.0`
   as a dev dependency so the scenarios execute as plain pytest items in CI).
 
 ## 3. Authoring workflow (`wf_c467c8ac-951`, 32 agents)

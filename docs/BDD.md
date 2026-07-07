@@ -2,7 +2,8 @@
 
 The agent's behavior is specified as executable Gherkin. **Every module-level
 function and class method in `src/` and `scripts/` (142 functions) has its own
-BDD scenario** (210 scenarios across 45 feature files), each derived from
+BDD scenario** (210 scenarios across 45 feature files — 215 pytest items once
+the three Scenario Outlines expand their examples), each derived from
 the root feature `tests/bdd/features/00_main_functionality.feature` — the main
 functionality (memory-first answering over the five routes: `memory_hit`,
 `memory_miss_web_search`, `degraded_web`, `blocked`, `failed`).

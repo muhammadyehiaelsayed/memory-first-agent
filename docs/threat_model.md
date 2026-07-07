@@ -12,6 +12,11 @@ separation, L3 sanitize-before-store) plus an output defence.
 | T3 | **Memory poisoning** — injected content stored in Redis and replayed as trusted context on future hits (highest-value threat) | **L3 sanitize-before-store** (`security/sanitizer.py`): fetched content is neutralised **once, between markdown conversion and chunking**, so stored text is always sanitised text. Injection phrases become the literal marker `[removed-suspicious-instruction]` (never silently deleted). `sanitizer_flags` and a `content_sha256` fingerprint are persisted per chunk and re-attached in the L2 provenance header on every memory hit, so poisoned-but-neutralised content always replays as flagged quoted data. |
 | T4 | Exfiltration / unsafe output (attacker URLs, tracker images) | The L2 prompt rule "cite only URLs that appear in a `source_url` field" plus a markdown-image strip applied to the produced answer text in both answer nodes, so a tracker/exfil image can never reach output even if the model emits one. |
 
+Every mitigation and degradation path above is pinned by executable BDD scenarios
+(`tests/bdd/features/security_*.feature`, `nodes_guard.feature`, `utils_reliability.feature`;
+the blocked/degraded/failed routes end-to-end in `00_main_functionality.feature` — full index
+and traceability matrix in `docs/BDD.md`).
+
 ## Reliability posture
 
 Every upstream dependency has a single-owner retry policy (`utils/reliability.py`, tenacity)

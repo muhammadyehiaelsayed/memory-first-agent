@@ -1,8 +1,9 @@
-# Design Decisions (finalized in M6)
+# Design Decisions (finalized in M6, extended at v1.3)
 
-Key technology rulings for this repo, seeded at M1 and finalized at M6 (2026-07-06). The
-standing rulings below are binding from day one; the anti-churn list was re-verified against
-the M2–M6 specs and remains the complete cut-scope record cited by every milestone's plan.
+Key technology rulings for this repo, seeded at M1, finalized at M6 (2026-07-06), and extended
+at v1.3 with the BDD-layer rulings. The standing rulings below are binding from day one; the
+anti-churn list was re-verified against the M2–M6 specs and remains the complete cut-scope
+record cited by every milestone's plan.
 
 ## Locked at M1
 
@@ -17,12 +18,24 @@ the M2–M6 specs and remains the complete cut-scope record cited by every miles
 - **One OpenAI key** for LLMs + embeddings (clients land in M2/M4); optional
   `OPENAI_BASE_URL` → GitHub Models for free development only, never the recorded demo.
 
+## Locked at v1.3 (BDD layer)
+
+- **pytest-bdd scenarios run as plain pytest items** — no separate BDD runner; the suite runs
+  in CI with everything else.
+- **One Gherkin scenario per module-level function** (one feature file per module), each
+  derived from the root feature's main-functionality scenarios.
+- **AST-derived bidirectional `# covers:` gate** (`tests/bdd/test_bdd_traceability.py`) —
+  a missing or stale declaration fails the build; `docs/BDD.md` is the generated index.
+- **Keyless by default** — redis-backed scenarios auto-skip when Redis is unreachable.
+
 ## Standing anti-churn rulings (do NOT re-add; evaluated twice and rejected)
 
 - The **0.50 weak-memory salvage route** (no env var, no route) and the 2-hit chunk-drop policy.
 - **Canary token** and **output URL-defang allowlist** (stretch only).
 - **Redis turn-log mirror** — `logs/turns.jsonl` (JSONL) stays the single source of truth.
-- **CI coverage gate** — a coverage *report* is emitted; no threshold fails the build.
+- **CI *line-coverage* gate** — a coverage *report* is emitted; no coverage-% threshold fails
+  the build. (Distinct from the v1.3 BDD traceability gate, which *does* fail the build on
+  missing function→scenario coverage.)
 - **`GUARD_LLM_CHECK`** gray-zone LLM classifier (stretch only).
 - **Token streaming** — the REPL streams graph *updates*, not tokens.
 - **Deep session memory** — chat history is the REPL's last 6 turns; the Redis memory is
