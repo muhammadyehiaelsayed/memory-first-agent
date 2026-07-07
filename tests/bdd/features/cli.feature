@@ -160,6 +160,15 @@ Feature: Command-line interface (src/memagent/cli.py)
     Then stdout contains "a required step failed"
     And stdout does not contain "MEMORY HIT"
 
+  # source: milestone-3-langgraph-guardrails.md :: an L1-blocked payload never enters replayed chat history
+  # covers: memagent.cli._chat
+  Scenario: A blocked chat turn is refused and never re-enters replayed history
+    Given a stubbed agent that blocks the first question and answers the next
+    And the user types a blocked question, then a normal question, then exits
+    When the chat REPL runs
+    Then stdout contains "[BLOCKED by input guard]"
+    And the blocked question does not appear in the next turn's replayed history
+
   # source: milestone-4-llms-logging-analytics.md :: --json prints aggregates to stdout only
   # covers: memagent.cli.analytics
   Scenario: analytics --json prints the aggregate object as JSON to stdout

@@ -344,6 +344,24 @@ def _ingest_fresh():
     }
 
 
+@given("a fetched page whose chunker raises", target_fixture="ctx")
+def _ingest_chunk_fail(monkeypatch):
+    import memagent.nodes.ingest as ingest_mod
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("chunk boom")
+
+    # chunk_markdown() runs inside the per-doc guard, so a chunker blow-up degrades the page.
+    monkeypatch.setattr(ingest_mod, "chunk_markdown", boom)
+    doc = _page()
+    return {
+        "memory": FakeMemory(fresh=False),
+        "llm": CapturingSummaryLLM(),
+        "doc": doc,
+        "state": {"query": "q", "fetched_docs": [doc]},
+    }
+
+
 @when("the ingest content node runs")
 def _run_ingest(ctx):
     node = make_ingest_content(_resources(memory=ctx["memory"], analytics_llm=ctx["llm"]))
@@ -445,3 +463,14 @@ def _fresh_skip(ctx):
 @then("the page is still chunked for the in-hand answer")
 def _fresh_chunks(ctx):
     assert ctx["update"]["chunks"]
+
+
+@then("the turn still returns with the page skipped and an ingest failure recorded")
+def _ingest_degraded(ctx):
+    update = ctx["update"]
+    assert update["fetched_docs"]  # turn returned normally, no exception propagated
+    assert update["chunks"] == []  # nothing chunked for the failed doc
+    assert update["stored_chunk_ids"] == []
+    assert any(
+        e["node"] == "ingest_content" and "ingest failed" in e["detail"] for e in update["errors"]
+    )

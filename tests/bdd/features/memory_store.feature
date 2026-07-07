@@ -70,7 +70,7 @@ Feature: Redis vector memory store (src/memagent/memory/store.py)
     Given an empty web_memory index holding a single chunk anchored at a known unit embedding
     When the anchor content is looked up by nearest-neighbour search
     Then the top hit carries similarity 1.0 with its text, url and title intact
-    And a query at cosine 0.70 to the anchor scores exactly 0.70, an inclusive hit at the 0.70 threshold
+    And a query at cosine 0.70 to the anchor scores 0.70, within float32 round-trip noise of the threshold
     And an orthogonal query scores 0.0
     And a nearest-neighbour lookup against a truly empty index returns an empty list
 

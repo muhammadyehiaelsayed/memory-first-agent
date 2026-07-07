@@ -5,13 +5,19 @@ oversize bodies are skipped without retry; one failing URL never stops the other
 """
 
 import asyncio
+import socket
 
 import httpx
 import respx
 
 from memagent.config import Settings
 from memagent.utils.errors import PageFetchError
-from memagent.web.fetch import HttpxPageFetcher
+from memagent.web.fetch import (
+    HttpxPageFetcher,
+    _is_private_host,
+    _registrable_domain,
+    filter_urls,
+)
 
 SETTINGS = Settings(_env_file=None, wait_cap_scale=0.0)
 HTML = {"content-type": "text/html"}
@@ -120,6 +126,51 @@ def test_public_redirect_is_still_followed():
     fetcher = HttpxPageFetcher(SETTINGS)
     doc = _run(fetcher._fetch_one("https://start.com/"))
     assert doc and doc["url"] == "https://final.com/p"
+
+
+# --- #8: compound ccTLD registrable domain (diversity cap must not collapse distinct orgs) ---
+def test_compound_cctld_keeps_three_labels():
+    assert _registrable_domain("bbc.co.uk") == "bbc.co.uk"
+    assert _registrable_domain("www.guardian.co.uk") == "guardian.co.uk"
+    # A plain two-label TLD is still collapsed to two labels.
+    assert _registrable_domain("www.sub.example.com") == "example.com"
+
+
+def test_distinct_couk_orgs_not_collapsed_by_diversity_cap():
+    # Four distinct *.co.uk organisations must NOT share one "co.uk" bucket and get
+    # dropped by max_urls_per_domain — each is its own registrable domain.
+    urls = [
+        "https://bbc.co.uk/a",
+        "https://guardian.co.uk/b",
+        "https://sky.co.uk/c",
+        "https://tesco.co.uk/d",
+    ]
+    assert filter_urls(urls, SETTINGS) == urls
+
+
+# --- #10: DNS-resolving SSRF guard (hostname -> private IP is blocked) ---
+def test_hostname_resolving_to_private_ip_is_blocked(monkeypatch):
+    monkeypatch.setattr(
+        "socket.getaddrinfo",
+        lambda host, *a, **k: [(2, 1, 6, "", ("10.0.0.5", 0))],
+    )
+    assert _is_private_host("internal.attacker.example") is True
+
+
+def test_hostname_resolving_to_public_ip_is_allowed(monkeypatch):
+    monkeypatch.setattr(
+        "socket.getaddrinfo",
+        lambda host, *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0))],
+    )
+    assert _is_private_host("public.example") is False
+
+
+def test_dns_resolution_failure_fails_open(monkeypatch):
+    def boom(*a, **k):
+        raise socket.gaierror("name resolution failed")
+
+    monkeypatch.setattr("socket.getaddrinfo", boom)
+    assert _is_private_host("nonexistent.example") is False
 
 
 @respx.mock

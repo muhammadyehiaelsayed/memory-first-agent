@@ -18,6 +18,13 @@ Feature: Bounded, guarded page fetching for the web branch (src/memagent/web/fet
     And the result is lower-cased with any trailing dot removed
     And a single-label host is returned unchanged
 
+  # source: milestone-3-web-pipeline.md :: JS-only domains are denylisted (registrable-domain matching)
+  # covers: memagent.web.fetch._registrable_domain
+  Scenario: Distinct organisations under a compound ccTLD are not collapsed
+    Given two hosts belonging to different organisations under the co.uk public suffix
+    When the registrable domain is computed for each host
+    Then each host keeps three labels and the two organisations stay distinct
+
   # source: milestone-3-web-pipeline.md :: Private, loopback and link-local targets are rejected
   # covers: memagent.web.fetch._is_private_host
   Scenario: Private, loopback and link-local hosts are recognised
@@ -25,6 +32,13 @@ Feature: Bounded, guarded page fetching for the web branch (src/memagent/web/fet
     When each host is tested against the private-host guard
     Then localhost and the private, loopback and link-local IP literals are flagged private
     And a public IP and an unresolved hostname are not flagged
+
+  # source: milestone-3-web-pipeline.md :: Private, loopback and link-local targets are rejected
+  # covers: memagent.web.fetch._is_private_host
+  Scenario: A hostname resolving to a private IP is flagged private
+    Given a hostname whose DNS record resolves to a private address
+    When the resolving hostname is tested against the private-host guard
+    Then the resolving hostname is flagged private
 
   # source: milestone-3-web-pipeline.md :: Only http and https schemes survive
   # covers: memagent.web.fetch.filter_urls

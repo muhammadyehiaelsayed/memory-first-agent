@@ -29,12 +29,14 @@ Feature: Grounding eval harness demonstrates cited, abstaining answers (scripts/
     And an aggregate over all three dimensions is printed
     And the output states it is a demonstration, not a benchmark
 
-  # source: milestone-6-e2e-evals-delivery.md :: --mock scores all three dimensions keylessly
+  # source: milestone-6-e2e-evals-delivery.md :: --mock derives verdicts from the real answers
   # covers: scripts.eval_grounding._run_mock
-  Scenario: The keyless mock run scores every case and succeeds
+  Scenario: The keyless mock run derives verdicts from real answers and passes on correct behaviour
     Given no API key and no Redis are available
     When the grounding mock run executes
     Then it prints an aggregate scorecard
+    And the abstain cases score as correctly abstained and not grounded
+    And the grounded cases score as grounded and cited
     And it returns exit code 0
 
   # covers: scripts.eval_grounding._run_real

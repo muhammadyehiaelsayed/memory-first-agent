@@ -55,6 +55,35 @@ def test_strip_markdown_images_helper():
     assert strip_markdown_images("t ![a](u) y") == "t  y"
 
 
+class _FakePipe:
+    """Minimal async-pipeline stand-in: buffers hset/expire, applies hashes on execute()."""
+
+    def __init__(self, redis):
+        self._redis = redis
+        self._ops = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def hset(self, key, mapping):
+        self._ops.append(("hset", key, mapping))
+        return self
+
+    def expire(self, key, ttl):
+        self._ops.append(("expire", key, ttl))
+        return self
+
+    async def execute(self):
+        for op in self._ops:
+            if op[0] == "hset":
+                self._redis.hashes[op[1]] = op[2]
+        self._ops.clear()
+        return []
+
+
 class FakeRedis:
     def __init__(self):
         self.hashes = {}
@@ -67,6 +96,9 @@ class FakeRedis:
 
     async def expire(self, key, ttl):
         pass
+
+    def pipeline(self, transaction=True):
+        return _FakePipe(self)
 
 
 def test_poisoned_page_persists_flags_and_sha256():

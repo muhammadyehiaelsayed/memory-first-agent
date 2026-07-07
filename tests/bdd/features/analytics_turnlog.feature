@@ -28,3 +28,10 @@ Feature: Turn record schema and JSONL writer (src/memagent/analytics/turnlog.py)
     Given a web-search turn state with five results, three fetched pages, and twelve persisted chunk ids
     When the turn record is built
     Then the web block reports provider "tavily", five results, three fetched pages, and twelve ingested chunks
+
+  # source: milestone-4-llms-logging-analytics.md :: summary-LLM tokens are accounted per turn
+  # covers: memagent.analytics.turnlog.build_turn_record
+  Scenario: Per-page summary tokens are folded into a summary_llm bucket
+    Given a web-search turn state carrying answer tokens and two per-page summary usages
+    When the turn record is built
+    Then the record carries a summary_llm bucket summing both pages' tokens

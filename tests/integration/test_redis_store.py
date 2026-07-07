@@ -102,7 +102,10 @@ async def test_distance_to_similarity_exact(clean_index, settings):
     assert abs(identical[0]["similarity"] - 1.0) <= 1e-6
     assert abs(orthogonal[0]["similarity"] - 0.0) <= 1e-6
     assert abs(cos07[0]["similarity"] - 0.70) <= 1e-6
-    assert cos07[0]["similarity"] >= settings.similarity_threshold - 1e-6  # inclusive hit at 0.70
+    # float32 round-trips the exact-0.70 cosine pair to ~0.699999988 -- within 1e-6 of the 0.70
+    # threshold, yet just below it, so the production router (exact >=, no epsilon) routes this
+    # boundary pair as a MISS. Router hit/miss is covered exactly in tests/unit/test_similarity.py.
+    assert cos07[0]["similarity"] >= settings.similarity_threshold - 1e-6
 
 
 # ---- FR-M3-24: the 24h freshness gate boundary (is_fresh) is exclusive (`<`) ----
@@ -150,3 +153,44 @@ async def test_meta_hash_has_ttl(clean_index, fake_embedder, settings):
     )
     ttl = await clean_index.client.ttl(f"doc:{url_hash(page['url'])}")
     assert 0 < ttl <= settings.memory_ttl_seconds  # bounded expiry, not -1 (unbounded)
+
+
+# ---- M8: store() batches all writes into a single pipeline round-trip (no per-chunk hset/expire) ----
+async def test_store_batches_writes_in_one_pipeline(clean_index, fake_embedder, settings):
+    from memagent.memory.urls import url_hash
+
+    store = RedisMemoryStore(settings, clean_index.client)
+    calls = {"pipeline": 0, "execute": 0}
+    real_pipeline = store._redis.pipeline
+
+    def counting_pipeline(*args, **kwargs):
+        calls["pipeline"] += 1
+        pipe = real_pipeline(*args, **kwargs)
+        real_execute = pipe.execute
+
+        async def counting_execute(*a, **k):
+            calls["execute"] += 1
+            return await real_execute(*a, **k)
+
+        pipe.execute = counting_execute
+        return pipe
+
+    store._redis.pipeline = counting_pipeline
+    texts = [f"redis chunk body number {i}" for i in range(6)]
+    page = _page(url="https://redis.io/pipe", title="Pipe")
+    chunks = [_chunk(t, page["url"], page["title"]) for t in texts]
+    await store.store(
+        page=page,
+        chunks=chunks,
+        vectors=await fake_embedder.embed(texts),
+        source_query="q",
+        flags=[],
+    )
+    # 6 chunks + meta once took ~14 serial hset/expire round-trips; now one pooled execute().
+    assert calls["pipeline"] == 1
+    assert calls["execute"] == 1
+    # the batched writes still land: every chunk round-trips out with a bounded TTL.
+    h = url_hash(page["url"])
+    stored = await clean_index.client.hget(f"chunk:{h}:0", "chunk_text")
+    assert (stored.decode() if isinstance(stored, bytes) else stored) == texts[0]
+    assert 0 < await clean_index.client.ttl(f"chunk:{h}:5") <= settings.memory_ttl_seconds

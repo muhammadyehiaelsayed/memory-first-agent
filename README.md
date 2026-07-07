@@ -4,7 +4,7 @@ A GenAI agent that answers from **Redis vector memory first** (similarity ≥ 0.
 code — not by the model), falls back to **web search** on a miss, ingests what it finds for
 future reuse, and returns **grounded answers with source URLs**.
 
-> **Zero keys needed:** `make test` (fully offline) and `python scripts/eval_lifecycle.py --mock`
+> **Zero keys needed:** `make test` (fully offline) and `uv run python scripts/eval_lifecycle.py --mock`
 > (needs a local `redis:8.2` — run `make redis-up` first). CI runs these among its lint / test / eval steps.
 > **One key** (`OPENAI_API_KEY`) **+ Docker** for the live demo; `TAVILY_API_KEY` optional (keyless DuckDuckGo fallback).
 >
@@ -27,11 +27,11 @@ CLI subcommand — the Make target name differs from the CLI command name), `mak
 `make test-integration`, `make lint`, `make demo`.
 
 **Zero-key path** (matches CI, no API keys / no internet): `make test` (also needs no Redis) and
-`python scripts/eval_lifecycle.py --mock` (needs a local `redis:8.2` — `make redis-up`).
+`uv run python scripts/eval_lifecycle.py --mock` (needs a local `redis:8.2` — `make redis-up`).
 
-`make test` runs 355 keyless tests (362 total with the redis-backed integration/e2e set): unit
-tests plus a 210-scenario BDD layer (pytest-bdd) with one feature file per module. Every one of
-the 142 module-level functions carries a `# covers:` declaration, enforced bidirectionally by a
+`make test` runs 391 keyless tests (399 total with the redis-backed integration/e2e set): unit
+tests plus a 221-scenario BDD layer (pytest-bdd) with one feature file per module. Every one of
+the 146 module-level functions and class methods carries a `# covers:` declaration, enforced bidirectionally by a
 traceability gate — index and matrix in [`docs/BDD.md`](docs/BDD.md).
 
 **No uv?** `pip install -e ".[dev]"` inside a Python 3.12 venv works as a fallback
@@ -100,7 +100,8 @@ graph TD;
 Every turn appends one JSON record to `logs/turns.jsonl` (route, similarity, sources,
 latencies, token usage, query classification). `memagent analytics` renders hit-rate and
 topic/question-type tables over it (`--json` for machines); `logs/turns.sample.jsonl`
-ships so the report works on a fresh clone.
+ships as a record-format reference — on a fresh clone `analytics` reports no turns until you
+run `ask`/`chat`.
 
 The turn log is directly DuckDB-queryable:
 
@@ -112,9 +113,9 @@ JSONL stays the single source of truth — there is no Redis mirror of turn reco
 
 ## Security & reliability
 
-Full threat model in [`docs/threat_model.md`](docs/threat_model.md). Four threats, defended by
+Full threat model in [`docs/threat_model.md`](docs/threat_model.md). Five threats, defended by
 three guardrail layers (L1 input screen, L2 instruction/data separation, L3
-sanitize-before-store) plus an output defence:
+sanitize-before-store) plus an output defence and a fetch-side SSRF guard:
 
 | ID | Threat | Mitigation |
 |---|---|---|
@@ -122,6 +123,7 @@ sanitize-before-store) plus an output defence:
 | T2 | Indirect injection inside fetched pages | L2 data/instruction separation + L3 sanitizer |
 | T3 | **Memory poisoning** — injected content stored in Redis, replayed as trusted context on future hits | **L3 sanitize-before-store + persisted `sanitizer_flags` provenance** (the highest-value defense: anything surviving ingestion becomes "trusted memory" forever) |
 | T4 | Exfil/unsafe output (attacker URLs, tracker images) | prompt rule "cite only provenance URLs" + markdown-image strip on output |
+| T5 | SSRF via fetched URLs — a page redirecting to cloud-metadata / loopback / internal services | fetch-side guard in `web/fetch.py`: drop non-http(s) and private-IP-literal URLs, follow redirects manually with `_is_safe_fetch_target` re-checked on every hop, and reject hosts that DNS-resolve to a private/loopback/link-local address |
 
 Reliability: every upstream dependency has a single-owner retry policy
 (`utils/reliability.py`, tenacity) with typed failures; every failure mode has a designed
@@ -135,8 +137,11 @@ Stated honestly, each with its named production upgrade:
 
 - **0.70 similarity threshold.** `SIMILARITY_THRESHOLD=0.7` is calibrated for
   `text-embedding-3-small`; the boundary is inclusive (`similarity = 1 − vector_distance`,
-  the single conversion site). Changing `EMBEDDING_MODEL` changes what 0.70 *means* — re-tune
-  `SIMILARITY_THRESHOLD` and run `make wipe` to rebuild the index for the new geometry.
+  the single conversion site). It is a chosen constant validated by mechanism and boundary
+  tests (miss→store→hit routing plus inclusive-boundary value checks), not by an empirical
+  semantic-calibration gate over a labelled paraphrase/non-match corpus — that side rests on
+  hand-observed dev-tier figures. Changing `EMBEDDING_MODEL` changes what 0.70 *means* —
+  re-tune `SIMILARITY_THRESHOLD` and run `make wipe` to rebuild the index for the new geometry.
 - **TTL is a coarse staleness policy, not a limitation.** `MEMORY_TTL_SECONDS=604800` (7 days)
   bounds how long a stored page is reused. The production upgrade is ETag / Last-Modified
   conditional revalidation (re-fetch only when the source changed) rather than a blunt clock.
@@ -152,10 +157,11 @@ Stated honestly, each with its named production upgrade:
 
 Memory-first matching is embedding-similarity, so recall depends on how the re-ask is phrased:
 
-- **Verbatim re-ask → HIT.** "How does Redis vector search work?" asked twice → turn 2 is a
-  `memory_hit` (`sim ≈ 0.8`, comfortably ≥ 0.70), answered from memory with no web call. It is
-  not a 1.0 self-match: the query is never embedded-and-stored, so the re-ask matches against
-  the stored page's summary + chunks (the demo transcript shows a live figure).
+- **Verbatim re-ask → HIT.** "How does Redis 8 vector search work?" asked twice → turn 2 is a
+  `memory_hit` (`sim ≈ 0.74` in the cited transcript, ~0.04 above the 0.70 boundary), answered
+  from memory with no web call. It is not a 1.0 self-match: the query is never
+  embedded-and-stored, so the re-ask matches against the stored page's summary + chunks (the
+  demo transcript shows the live figure).
 - **Paraphrase → depends.** "Explain how vectors are searched in Redis" embeds *near* the
   original but may fall just below 0.70 and miss — then it searches the web and ingests, so the
   *next* phrasing in that neighbourhood hits.

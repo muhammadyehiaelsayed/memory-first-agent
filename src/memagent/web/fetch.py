@@ -11,6 +11,7 @@ import asyncio
 import html as html_lib
 import ipaddress
 import re
+import socket
 from urllib.parse import urlsplit
 
 import httpx
@@ -40,23 +41,73 @@ _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 logger = structlog.get_logger(__name__)
 
 
+# Compound public suffixes whose registrable domain is the last THREE labels (bbc.co.uk,
+# not co.uk). A tiny bundled list — deliberately NOT the full PSL and dependency-free
+# (tldextract's default PSL bootstrap fetches over the network, which breaks the repo's
+# keyless/offline design). Enough to stop the diversity cap collapsing distinct *.co.uk /
+# *.com.au orgs into one bucket.
+_COMPOUND_SUFFIXES = frozenset(
+    {
+        "co.uk",
+        "ac.uk",
+        "org.uk",
+        "gov.uk",
+        "com.au",
+        "co.jp",
+        "com.br",
+        "co.nz",
+        "co.in",
+        "co.za",
+        "com.mx",
+    }
+)
+
+
 def _registrable_domain(host: str) -> str:
     parts = host.lower().rstrip(".").split(".")
-    return ".".join(parts[-2:]) if len(parts) >= 2 else host.lower()
+    if len(parts) < 2:
+        return host.lower()
+    last_two = ".".join(parts[-2:])
+    if len(parts) >= 3 and last_two in _COMPOUND_SUFFIXES:
+        return ".".join(parts[-3:])
+    return last_two
 
 
 def _is_private_host(host: str) -> bool:
     if host.lower() == "localhost":
         return True
+
+    def _blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+        return (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_unspecified
+        )
+
     try:
-        ip = ipaddress.ip_address(host)
+        return _blocked(ipaddress.ip_address(host))
     except ValueError:
-        # Hostname (not an IP literal): a known, accepted limitation of this mini-guard —
-        # we do not resolve DNS, so a hostname that points at a private IP is not caught here.
+        pass
+    # Hostname (not an IP literal): resolve it and block if ANY resolved address is
+    # private/loopback/link-local/reserved/unspecified — this closes the direct
+    # hostname->private-IP SSRF vector. Fail-open on resolution error (return False) so a
+    # transient DNS failure does not drop an otherwise-public URL. DNS-rebinding TOCTOU (the
+    # record changing between this check and the connect) remains an accepted, out-of-scope
+    # residual for this mini-guard.
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
         return False
-    return (
-        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_unspecified
-    )
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            continue
+        if _blocked(ip):
+            return True
+    return False
 
 
 def _is_safe_fetch_target(url: str) -> bool:
@@ -154,7 +205,10 @@ class HttpxPageFetcher:
                         # Oversize: skip the page entirely — never truncate-and-keep.
                         return None
                 html = body.decode(response.encoding or "utf-8", errors="replace")
-                markdown = to_markdown(html, self._settings)
+                # trafilatura.extract is CPU-bound (lxml parse, doubled on the recall
+                # fallback) and blocks the event loop; offload it so concurrent page
+                # extractions actually run in parallel (mirrors DdgsSearcher.to_thread).
+                markdown = await asyncio.to_thread(to_markdown, html, self._settings)
                 if markdown is None:
                     return None
                 final_url = str(response.url)  # post-redirect URL is the stored identity

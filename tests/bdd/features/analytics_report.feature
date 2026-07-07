@@ -34,3 +34,10 @@ Feature: Analytics aggregation and reporting over the turn log (src/memagent/ana
     Given an aggregate over a memory-hit turn whose query is "[red]boom[/red]"
     When the report is rendered to a console
     Then all report sections appear and the query text is rendered literally rather than as styling
+
+  # source: milestone-4-llms-logging-analytics.md :: per-turn token usage aggregated and costed
+  # covers: memagent.analytics.report.aggregate, memagent.analytics.report.render_report
+  Scenario: Token usage and cost are aggregated by model and rendered
+    Given two web-miss turns each carrying answer and summary token usage
+    When the turns are aggregated and the report is rendered
+    Then the token totals and per-model cost appear in the report

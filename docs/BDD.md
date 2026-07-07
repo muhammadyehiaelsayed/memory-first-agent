@@ -2,7 +2,7 @@
 
 The agent's behavior is specified as executable Gherkin. **Every module-level
 function and class method in `src/` and `scripts/` (146 functions) has its own
-BDD scenario** (215 scenarios across 45 feature files), each derived from
+BDD scenario** (221 scenarios across 45 feature files), each derived from
 the root feature `tests/bdd/features/00_main_functionality.feature` — the main
 functionality (memory-first answering over the five routes: `memory_hit`,
 `memory_miss_web_search`, `degraded_web`, `blocked`, `failed`).
@@ -43,10 +43,10 @@ of the suite — no separate BDD runner.
 | `00_main_functionality.feature` | `—` | — | 6 | `tests/bdd/test_bdd_main_functionality.py` |
 | `99_traceability.feature` | `—` | — | 1 | `tests/bdd/test_bdd_traceability.py` |
 | `analytics_classify.feature` | `src/memagent/analytics/classify.py` | "Log exactly one analytics record for every turn" | 6 | `tests/bdd/test_bdd_analytics.py` |
-| `analytics_report.feature` | `src/memagent/analytics/report.py` | "Log exactly one analytics record for every turn" | 4 | `tests/bdd/test_bdd_analytics.py` |
-| `analytics_turnlog.feature` | `src/memagent/analytics/turnlog.py` | "Log exactly one analytics record for every turn" | 3 | `tests/bdd/test_bdd_analytics.py` |
+| `analytics_report.feature` | `src/memagent/analytics/report.py` | "Log exactly one analytics record for every turn" | 5 | `tests/bdd/test_bdd_analytics.py` |
+| `analytics_turnlog.feature` | `src/memagent/analytics/turnlog.py` | "Log exactly one analytics record for every turn" | 4 | `tests/bdd/test_bdd_analytics.py` |
 | `app.feature` | `src/memagent/app.py` | "Fall back to the web and ingest what was found on a memory miss" | 6 | `tests/bdd/test_bdd_orchestration.py` |
-| `cli.feature` | `src/memagent/cli.py` | "Answer from memory when a similar question was seen before" | 23 | `tests/bdd/test_bdd_cli.py` |
+| `cli.feature` | `src/memagent/cli.py` | "Answer from memory when a similar question was seen before" | 24 | `tests/bdd/test_bdd_cli.py` |
 | `config.feature` | `src/memagent/config.py` | "Answer from memory when a similar question was seen before" | 4 | `tests/bdd/test_bdd_contracts.py` |
 | `graph.feature` | `src/memagent/graph.py` | "Block malicious input at the guard before any model call" | 2 | `tests/bdd/test_bdd_orchestration.py` |
 | `interfaces.feature` | `src/memagent/interfaces.py` | "Answer from memory when a similar question was seen before" | 10 | `tests/bdd/test_bdd_contracts.py` |
@@ -61,7 +61,7 @@ of the suite — no separate BDD runner.
 | `nodes_embed.feature` | `src/memagent/nodes/embed.py` | "Report failure when the query cannot be embedded" | 2 | `tests/bdd/test_bdd_nodes_memory_path.py` |
 | `nodes_fetch.feature` | `src/memagent/nodes/fetch.py` | "Fall back to the web and ingest what was found on a memory miss" | 2 | `tests/bdd/test_bdd_nodes_web_path.py` |
 | `nodes_guard.feature` | `src/memagent/nodes/guard.py` | "Block malicious input at the guard before any model call" | 4 | `tests/bdd/test_bdd_security.py` |
-| `nodes_ingest.feature` | `src/memagent/nodes/ingest.py` | "Fall back to the web and ingest what was found on a memory miss" | 6 | `tests/bdd/test_bdd_nodes_web_path.py` |
+| `nodes_ingest.feature` | `src/memagent/nodes/ingest.py` | "Fall back to the web and ingest what was found on a memory miss" | 7 | `tests/bdd/test_bdd_nodes_web_path.py` |
 | `nodes_log.feature` | `src/memagent/nodes/log.py` | "Log exactly one analytics record for every turn" | 3 | `tests/bdd/test_bdd_analytics.py` |
 | `nodes_memory.feature` | `src/memagent/nodes/memory.py` | "Answer from memory when a similar question was seen before" | 3 | `tests/bdd/test_bdd_nodes_memory_path.py` |
 | `nodes_search.feature` | `src/memagent/nodes/search.py` | "Fall back to the web and ingest what was found on a memory miss" | 2 | `tests/bdd/test_bdd_nodes_web_path.py` |
@@ -82,13 +82,13 @@ of the suite — no separate BDD runner.
 | `utils_errors.feature` | `src/memagent/utils/errors.py` | "Degrade gracefully when search succeeds but every page fetch fails" | 1 | `tests/bdd/test_bdd_utils.py` |
 | `utils_reliability.feature` | `src/memagent/utils/reliability.py` | "Report failure when the query cannot be embedded" | 8 | `tests/bdd/test_bdd_utils.py` |
 | `utils_timing.feature` | `src/memagent/utils/timing.py` | "Log exactly one analytics record for every turn" | 1 | `tests/bdd/test_bdd_utils.py` |
-| `web_fetch.feature` | `src/memagent/web/fetch.py` | "Fall back to the web and ingest what was found on a memory miss" | 16 | `tests/bdd/test_bdd_web_fetch.py` |
+| `web_fetch.feature` | `src/memagent/web/fetch.py` | "Fall back to the web and ingest what was found on a memory miss" | 18 | `tests/bdd/test_bdd_web_fetch.py` |
 | `web_search.feature` | `src/memagent/web/search.py` | "Fall back to the web and ingest what was found on a memory miss" | 8 | `tests/bdd/test_bdd_web_search.py` |
 | `web_to_markdown.feature` | `src/memagent/web/to_markdown.py` | "Fall back to the web and ingest what was found on a memory miss" | 5 | `tests/bdd/test_bdd_web_fetch.py` |
 
 ## Function → scenario traceability matrix
 
-205 coverage declarations for 146 functions.
+212 coverage declarations for 146 functions.
 
 | Function | Scenario | Feature file |
 |---|---|---|
@@ -102,11 +102,14 @@ of the suite — no separate BDD runner.
 | `memagent.analytics.report._counter_table` | A distribution table lists each key with its turn count, most frequent first | `analytics_report.feature` |
 | `memagent.analytics.report._is_lookup` | Only turns that consulted memory count as lookups | `analytics_report.feature` |
 | `memagent.analytics.report.aggregate` | Hit-rate is computed over lookup turns, with unclassified and error counts | `analytics_report.feature` |
+| `memagent.analytics.report.aggregate` | Token usage and cost are aggregated by model and rendered | `analytics_report.feature` |
 | `memagent.analytics.report.render_report` | The full report renders every section and escapes rich markup in user text | `analytics_report.feature` |
+| `memagent.analytics.report.render_report` | Token usage and cost are aggregated by model and rendered | `analytics_report.feature` |
 | `memagent.analytics.turnlog.TurnLogger.__init__` | The writer appends exactly one JSON line per record and creates missing directories | `analytics_turnlog.feature` |
 | `memagent.analytics.turnlog.TurnLogger.log` | The writer appends exactly one JSON line per record and creates missing directories | `analytics_turnlog.feature` |
 | `memagent.analytics.turnlog.build_turn_record` | A memory-hit record carries every schema field and no web block | `analytics_turnlog.feature` |
 | `memagent.analytics.turnlog.build_turn_record` | A web-route record reports provider, results, fetched pages, and only persisted chunks | `analytics_turnlog.feature` |
+| `memagent.analytics.turnlog.build_turn_record` | Per-page summary tokens are folded into a summary_llm bucket | `analytics_turnlog.feature` |
 | `memagent.app.Agent.__init__` | Constructing the agent compiles the graph once and mints a session id | `app.feature` |
 | `memagent.app.Agent.answer` | Answering a novel question misses memory, reaches the web and cites its sources | `app.feature` |
 | `memagent.app.Agent.ensure_ready` | The agent provisions its memory index once at startup and is idempotent | `app.feature` |
@@ -115,6 +118,7 @@ of the suite — no separate BDD runner.
 | `memagent.app.new_turn_state` | A fresh turn starts allowed, thresholded from settings and unrouted until proven | `app.feature` |
 | `memagent.cli._advance_status` | The live status names the step that runs next as each node finishes | `cli.feature` |
 | `memagent.cli._ask` | A single question is answered through the agent facade | `cli.feature` |
+| `memagent.cli._chat` | A blocked chat turn is refused and never re-enters replayed history | `cli.feature` |
 | `memagent.cli._chat` | A failed turn shows one clean error, never a hit banner then an apology | `cli.feature` |
 | `memagent.cli._chat` | The chat REPL prints the hit banner, the answer, and its sources | `cli.feature` |
 | `memagent.cli._emit` | Emitting to a non-terminal stdout stays byte-identical plain text | `cli.feature` |
@@ -199,6 +203,7 @@ of the suite — no separate BDD runner.
 | `memagent.nodes.guard.make_guard_input` | A flagged query proceeds but is barred from being stored | `nodes_guard.feature` |
 | `memagent.nodes.guard.make_guard_input` | Malicious input is refused at the guard with a canned message | `nodes_guard.feature` |
 | `memagent.nodes.ingest.make_ingest_content` | A fetched page is sanitized, summarised, chunked and stored for future reuse | `nodes_ingest.feature` |
+| `memagent.nodes.ingest.make_ingest_content` | A page whose chunker blows up degrades to a skipped doc without crashing the turn | `nodes_ingest.feature` |
 | `memagent.nodes.ingest.make_ingest_content` | A recently ingested URL is not re-stored within the freshness window | `nodes_ingest.feature` |
 | `memagent.nodes.ingest.make_ingest_content` | A skip-store turn persists nothing yet still chunks for the answer | `nodes_ingest.feature` |
 | `memagent.nodes.ingest.make_ingest_content` | A store failure never blocks the in-hand answer | `nodes_ingest.feature` |
@@ -251,8 +256,10 @@ of the suite — no separate BDD runner.
 | `memagent.web.fetch.HttpxPageFetcher.fetch` | Every page failing yields an empty result set for the degraded path | `web_fetch.feature` |
 | `memagent.web.fetch.HttpxPageFetcher.fetch` | One failing URL does not stop the others on a memory miss | `web_fetch.feature` |
 | `memagent.web.fetch._extract_title` | The page title is extracted, unescaped, whitespace-collapsed and bounded | `web_fetch.feature` |
+| `memagent.web.fetch._is_private_host` | A hostname resolving to a private IP is flagged private | `web_fetch.feature` |
 | `memagent.web.fetch._is_private_host` | Private, loopback and link-local hosts are recognised | `web_fetch.feature` |
 | `memagent.web.fetch._is_safe_fetch_target` | The SSRF target check rejects private hosts and non-HTTP schemes but accepts public URLs | `web_fetch.feature` |
+| `memagent.web.fetch._registrable_domain` | Distinct organisations under a compound ccTLD are not collapsed | `web_fetch.feature` |
 | `memagent.web.fetch._registrable_domain` | The registrable domain collapses to its last two labels | `web_fetch.feature` |
 | `memagent.web.fetch.filter_urls` | Denylisted domains are dropped and each domain is capped for diversity | `web_fetch.feature` |
 | `memagent.web.fetch.filter_urls` | Unsafe schemes and private hosts are removed by the URL filter | `web_fetch.feature` |
@@ -273,7 +280,7 @@ of the suite — no separate BDD runner.
 | `scripts.capture_demo._capture` | Capturing a live session renders both turns as a miss-then-hit transcript | `scripts_capture_demo.feature` |
 | `scripts.capture_demo.main` | Without a real OpenAI key the demo stays a pending placeholder | `scripts_capture_demo.feature` |
 | `scripts.eval_grounding._render` | The scorecard prints per-case rows, an aggregate, and an honest disclaimer | `scripts_eval_grounding.feature` |
-| `scripts.eval_grounding._run_mock` | The keyless mock run scores every case and succeeds | `scripts_eval_grounding.feature` |
+| `scripts.eval_grounding._run_mock` | The keyless mock run derives verdicts from real answers and passes on correct behaviour | `scripts_eval_grounding.feature` |
 | `scripts.eval_grounding._run_real` | The real run drives the OpenAI-backed answerer and judge | `scripts_eval_grounding.feature` |
 | `scripts.eval_grounding._score` | Scoring drives every fixed case through the answerer and the judge | `scripts_eval_grounding.feature` |
 | `scripts.eval_grounding.main` | The grounding entrypoint runs keylessly under the mock flag and exits zero | `scripts_eval_grounding.feature` |

@@ -16,6 +16,15 @@ from rich.table import Table
 # blocked/failed and redis_down-degraded turns never reached a memory lookup.
 _LOOKUP_ROUTES = ("memory_hit", "memory_miss_web_search")
 
+# Documented per-1M-token prices (USD), verified against the official OpenAI pricing page
+# (MODEL_CHOICES.md / docs/verification-2026-07-06.md): (input, output). Models absent here
+# are still token-counted; their cost simply shows as 0 rather than guessing an unknown price.
+_MODEL_PRICES_PER_1M = {
+    "gpt-5.4-mini": (0.75, 4.50),
+    "gpt-5.4-nano": (0.20, 1.25),
+    "text-embedding-3-small": (0.02, 0.0),
+}
+
 
 def _is_lookup(record: dict) -> bool:
     route = record.get("route")
@@ -25,12 +34,22 @@ def _is_lookup(record: dict) -> bool:
 
 
 def aggregate(records: Iterable[dict]) -> dict:
+    # Loads the whole turn log into a list (caller reads every line): fine under the project's
+    # bounded single-user local-CLI assumption; a long-lived multi-user deployment would want a
+    # streaming pass instead (specs YAGNI — not built speculatively).
     recs = list(records)
+
+    def _cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:
+        in_price, out_price = _MODEL_PRICES_PER_1M.get(model, (0.0, 0.0))
+        return (input_tokens * in_price + output_tokens * out_price) / 1_000_000
+
     topics: Counter = Counter()
     categories: Counter = Counter()
     question_types: Counter = Counter()
     languages: Counter = Counter()
     totals_by_route: dict[str, list[int]] = defaultdict(list)
+    tokens_in: Counter = Counter()  # input tokens summed per model
+    tokens_out: Counter = Counter()  # output tokens summed per model
     hits = errors = unclassified = lookups = 0
 
     for r in recs:
@@ -51,6 +70,27 @@ def aggregate(records: Iterable[dict]) -> dict:
         total_ms = (r.get("latency_ms") or {}).get("total")
         if isinstance(total_ms, int) and r.get("route"):
             totals_by_route[r["route"]].append(total_ms)
+        # answer_llm / analytics_llm / summary_llm buckets all share {model, input, output}.
+        for usage in (r.get("tokens") or {}).values():
+            if not usage:
+                continue
+            tokens_in[usage.get("model", "?")] += usage.get("input", 0)
+            tokens_out[usage.get("model", "?")] += usage.get("output", 0)
+
+    by_model = {
+        model: {
+            "input": tokens_in[model],
+            "output": tokens_out[model],
+            "cost_usd": round(_cost_usd(model, tokens_in[model], tokens_out[model]), 6),
+        }
+        for model in sorted(set(tokens_in) | set(tokens_out))
+    }
+    tokens_summary = {
+        "by_model": by_model,
+        "total_input": sum(tokens_in.values()),
+        "total_output": sum(tokens_out.values()),
+        "total_cost_usd": round(sum(m["cost_usd"] for m in by_model.values()), 6),
+    }
 
     return {
         "total_turns": len(recs),
@@ -64,6 +104,7 @@ def aggregate(records: Iterable[dict]) -> dict:
         },
         "errors": errors,
         "unclassified": unclassified,
+        "tokens": tokens_summary,
         "recent": [
             {
                 "ts": r.get("ts"),
@@ -115,6 +156,25 @@ def render_report(agg: dict, console: Console) -> None:
     for route, ms in sorted(agg["avg_latency_ms_by_route"].items()):
         latency.add_row(route, str(ms))
     console.print(latency)
+
+    # Token spend + cost turns the already-logged per-turn usage into the cost story the
+    # memory-first pitch depends on. Absent when no turn recorded any token usage.
+    tokens = agg.get("tokens") or {}
+    if tokens.get("by_model"):
+        usage = Table(title="Token usage & cost (USD)")
+        for column in ("model", "input tok", "output tok", "cost USD"):
+            usage.add_column(column, justify="right" if column != "model" else "left")
+        for model, u in sorted(tokens["by_model"].items()):
+            usage.add_row(
+                escape(str(model)), str(u["input"]), str(u["output"]), f"{u['cost_usd']:.4f}"
+            )
+        usage.add_row(
+            "TOTAL",
+            str(tokens["total_input"]),
+            str(tokens["total_output"]),
+            f"{tokens['total_cost_usd']:.4f}",
+        )
+        console.print(usage)
 
     recent = Table(title="Recent turns")
     for column in ("ts", "route", "sim", "topic", "query"):

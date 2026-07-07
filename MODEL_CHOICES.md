@@ -26,9 +26,9 @@
 
 | Role | Model | Price /1M tok (verified 2026-07-04, official OpenAI pricing page) | Why |
 |---|---|---|---|
-| Conversation | **gpt-5.4-mini** | $0.75 in / $4.50 out | Grounded RAG synthesis over a small, code-pre-filtered context (one summary + 2 chunks/page) with citation + refusal + injection rules. On the grounded/instruction-following axis this task actually lives on, mini benchmarks at or above the flagship; it supports `temperature=0` for deterministic, reproducible grounded output. |
+| Conversation | **gpt-5.4-mini** | $0.75 in / $4.50 out | Grounded RAG synthesis over a small, code-pre-filtered context (one summary + 2 chunks/page) with citation + refusal + injection rules. On the grounded/instruction-following axis this task actually lives on, published comparisons put mini on par with the flagship (this class of task, not a universal ranking); it is expected to support `temperature=0` for deterministic, reproducible grounded output (pending the real-key probe — see Build-time validation). |
 | Analytics (+ page summaries) | **gpt-5.4-nano** | $0.20 in / $1.25 out | The classifier is a flat 5-field closed-enum schema (topic/category/question_type/language/confidence) and the summaries are 5–8 sentences from the first 6K chars — both are nano's documented sweet spot (classification, extraction, high-volume summarization). Reusing it for summaries keeps the app at exactly 2 LLMs. |
-| Embeddings | **text-embedding-3-small** (1536d) | $0.02 in | Negligible cost; 1536 dims matches the FLAT index; L2-normalized, which keeps the `similarity = 1 − distance` identity exact. Same key/provider as the LLMs. |
+| Embeddings | **text-embedding-3-small** (1536d) | $0.02 in | Negligible cost; 1536 dims matches the FLAT index. Redis COSINE returns a normalized distance, so `similarity = 1 − distance` holds by the metric's definition. Same key/provider as the LLMs. |
 
 **Keys the evaluator needs: exactly one — `OPENAI_API_KEY`** (covers conversation,
 analytics, and embeddings). `TAVILY_API_KEY` stays optional (keyless ddgs fallback).
@@ -91,7 +91,7 @@ clean cost/quality narrative.
 
 | Model | Role considered | Input /1M | Output /1M | Verified | Notes |
 |---|---|---|---|---|---|
-| **gpt-5.4-mini** | **Conversation (CHOSEN)** | **$0.75** | **$4.50** | ✅ official page | ~$0.006 hit / ~$0.008 miss per turn; supports temperature=0 |
+| **gpt-5.4-mini** | **Conversation (CHOSEN)** | **$0.75** | **$4.50** | ✅ official page | ~$0.006 hit / ~$0.008 miss per turn; temperature=0 support pending real-key probe |
 | **gpt-5.4-nano** | **Analytics (CHOSEN)** | **$0.20** | **$1.25** | ✅ official page | Enum classifier + short summaries = its sweet spot |
 | **text-embedding-3-small** | **Embeddings (CHOSEN)** | **$0.02** | n/a | ✅ | 1536d, L2-normalized |
 | gpt-5.4 (flagship) | Conversation (RUNNER-UP) | $2.50 | $15.00 | ✅ official page | Reasoning family: rejects temperature; strongest injection resistance |

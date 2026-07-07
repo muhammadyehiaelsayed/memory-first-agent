@@ -7,9 +7,6 @@ test below ever proves flaky against real Redis, switch route_after_memory to
 `sim >= threshold - 1e-6` and update this comment.
 """
 
-import inspect
-
-from memagent.memory import store as store_module
 from memagent.memory.store import distance_to_similarity
 from memagent.routers import route_after_memory
 
@@ -29,9 +26,10 @@ def test_float32_noise_boundary_documented_decision():
 
 
 def test_l2_halved_formula_is_not_used():
-    source = inspect.getsource(store_module.distance_to_similarity)
-    assert "/ 2" not in source and "/2" not in source
-    assert "1.0 - distance" in source
+    # Behavioural, not source-text: the discredited half-distance formula (1 - d/2) would map
+    # distance 0.4 -> 0.8; the correct cosine identity (1 - d) maps it to 0.6.
+    assert distance_to_similarity(0.4) == 0.6
+    assert distance_to_similarity(0.4) != 0.8
 
 
 def test_conversion_extremes():

@@ -281,6 +281,17 @@ def _do_run_mock_grounding(ctx, capsys):
     ctx["out"] = capsys.readouterr().out
 
 
+@then("the abstain cases score as correctly abstained and not grounded")
+def _mock_abstain_rows(ctx):
+    # Derived (not hard-coded): an abstaining answer is not grounded but is a correct abstention.
+    assert "[abstain ] grounded=0 citations_valid=0 abstained_correctly=1" in ctx["out"]
+
+
+@then("the grounded cases score as grounded and cited")
+def _mock_grounded_rows(ctx):
+    assert "[grounded] grounded=1 citations_valid=1 abstained_correctly=1" in ctx["out"]
+
+
 # --------------------------------------------------------------------------- #
 # eval_grounding._run_real
 # --------------------------------------------------------------------------- #

@@ -1,8 +1,8 @@
 """Redis vector memory store.
 
 distance_to_similarity is THE one conversion site in the entire codebase
-(Constitution P-II): Redis COSINE returns distance d = 1 - cosine_similarity, and
-OpenAI embeddings are L2-normalized, so similarity is exactly 1 - d (never 1 - d/2).
+(Constitution P-II): Redis COSINE returns distance d = 1 - cosine_similarity (the
+metric normalizes internally), so similarity is exactly 1 - d for any inputs.
 
 knn returns the RAW unfiltered top-k (threshold routing lives in routers only).
 Redis-down graceful degradation is M5's — the M2 demo assumes Redis is up.
@@ -127,12 +127,7 @@ class RedisMemoryStore:
             num_results=k,
             dtype="float32",
         )
-        try:
-            results = await self._index.query(query)
-        except Exception as exc:  # noqa: BLE001 — translate redis outage; ResponseError re-raised
-            if err := _as_memory_error(exc):
-                raise err from exc
-            raise
+        results = await self._io(self._index.query(query))
         hits: list[MemoryHit] = []
         for r in results:
             flags = (r.get("sanitizer_flags") or "").strip()
@@ -168,7 +163,7 @@ class RedisMemoryStore:
             raise ValueError(
                 f"vector alignment violated: got {len(vectors)} vectors for {len(chunks)} "
                 f"chunks (summary={'present' if summary is not None else 'absent'}); "
-                f"expected {expected} (specs/002 research D6)"
+                f"expected {expected}"
             )
 
         # Deterministic upsert: remove the previous generation without SCAN.
@@ -184,9 +179,14 @@ class RedisMemoryStore:
         chunk_vectors = vectors[1:] if summary is not None else vectors
         stored_ids: list[str] = []
 
-        async def _write(key: str, text: str, doc_type: str, chunk_index: int, vec: list[float]):
-            await self._io(
-                self._redis.hset(
+        # Batch every write (summary + chunks + meta) into ONE pipeline round-trip instead of
+        # ~2 serial round-trips per chunk. Pipeline command methods buffer synchronously (not
+        # awaited); only execute() is awaited, and _io still translates a redis outage there.
+        # transaction=False keeps the same non-atomicity the prior serial hset->expire had.
+        async with self._redis.pipeline(transaction=False) as pipe:
+
+            def _queue(key: str, text: str, doc_type: str, chunk_index: int, vec: list[float]):
+                pipe.hset(
                     key,
                     mapping={
                         "chunk_text": text,
@@ -202,26 +202,25 @@ class RedisMemoryStore:
                         "embedding": array_to_buffer(vec, dtype="float32"),
                     },
                 )
-            )
-            if ttl > 0:
-                await self._io(self._redis.expire(key, ttl))
+                if ttl > 0:
+                    pipe.expire(key, ttl)
 
-        if summary is not None:
-            await _write(f"chunk:{h}:summary", summary, "summary", -1, vectors[0])
+            if summary is not None:
+                _queue(f"chunk:{h}:summary", summary, "summary", -1, vectors[0])
 
-        for i, (chunk, vec) in enumerate(zip(chunks, chunk_vectors)):
-            key = f"chunk:{h}:{i}"
-            await _write(key, chunk["text"], "chunk", i, vec)
-            stored_ids.append(key)
+            for i, (chunk, vec) in enumerate(zip(chunks, chunk_vectors)):
+                key = f"chunk:{h}:{i}"
+                _queue(key, chunk["text"], "chunk", i, vec)
+                stored_ids.append(key)
 
-        await self._io(
-            self._redis.hset(
+            pipe.hset(
                 meta_key,
                 mapping={"num_chunks": len(chunks), "fetched_at": fetched_at, "url": page["url"]},
             )
-        )
-        if ttl > 0:  # freshness bookkeeping expires in step with the chunks it describes
-            await self._io(self._redis.expire(meta_key, ttl))
+            if ttl > 0:  # freshness bookkeeping expires in step with the chunks it describes
+                pipe.expire(meta_key, ttl)
+
+            await self._io(pipe.execute())
         return stored_ids
 
     async def is_fresh(self, h: str) -> bool:

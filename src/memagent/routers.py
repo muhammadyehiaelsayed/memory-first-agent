@@ -1,10 +1,9 @@
-"""The five pure routing functions (verbatim PLAN section 3.3).
+"""The five pure routing functions.
 
-Pure functions of state — no I/O, deterministic. These bodies NEVER change; later
-milestones only remap graph path-map keys (M3: "web_search" -> real node; M5 wires
-route_after_guard). The hit/miss decision lives here, in code — never in a model
-(Constitution P-I). Comparison is exactly `>= threshold` (inclusive); the epsilon
-variant (threshold - 1e-6) is adopted ONLY if the boundary test proves flaky.
+Pure functions of state — no I/O, deterministic. The hit/miss decision lives here, in
+code — never in a model; that is what keeps "memory-first" verifiable. Comparison is
+exactly `>= threshold` (inclusive); the epsilon variant (threshold - 1e-6) is adopted
+ONLY if the boundary test proves flaky.
 """
 
 

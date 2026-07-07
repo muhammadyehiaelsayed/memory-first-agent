@@ -316,6 +316,29 @@ def _assert_web_record(record_ctx):
     }
 
 
+@given(
+    "a web-search turn state carrying answer tokens and two per-page summary usages",
+    target_fixture="record_ctx",
+)
+def _record_ctx_summary_tokens():
+    state = _make_state(
+        "memory_miss_web_search",
+        tokens={
+            "answer_llm": {"model": "gpt-5.4-mini", "input_tokens": 2311, "output_tokens": 402},
+            "summary:h1": {"model": "gpt-5.4-nano", "input_tokens": 500, "output_tokens": 90},
+            "summary:h2": {"model": "gpt-5.4-nano", "input_tokens": 300, "output_tokens": 60},
+        },
+    )
+    return {"state": state}
+
+
+@then("the record carries a summary_llm bucket summing both pages' tokens")
+def _assert_summary_bucket(record_ctx):
+    tokens = record_ctx["record"]["tokens"]
+    assert tokens["summary_llm"] == {"model": "gpt-5.4-nano", "input": 800, "output": 150}
+    assert tokens["answer_llm"]["input"] == 2311  # answer tokens still recorded alongside
+
+
 # ===========================================================================
 # Feature: analytics/classify.py — enums, _classify_user, classify
 # ===========================================================================
@@ -573,3 +596,35 @@ def _assert_report(rep_ctx):
         assert section in out
     # rendered literally — without escape() rich would drop the brackets and style the cell
     assert "[red]boom[/red]" in out
+
+
+@given(
+    "two web-miss turns each carrying answer and summary token usage",
+    target_fixture="tok_ctx",
+)
+def _tok_records():
+    usage = {
+        "tokens": {
+            "answer_llm": {"model": "gpt-5.4-mini", "input": 1000, "output": 200},
+            "summary_llm": {"model": "gpt-5.4-nano", "input": 500, "output": 100},
+        }
+    }
+    return {"records": [{"route": "memory_miss_web_search", **usage} for _ in range(2)]}
+
+
+@when("the turns are aggregated and the report is rendered")
+def _aggregate_and_render(tok_ctx):
+    tok_ctx["agg"] = aggregate(tok_ctx["records"])
+    buf = io.StringIO()
+    render_report(tok_ctx["agg"], Console(file=buf, width=200, force_terminal=False))
+    tok_ctx["out"] = buf.getvalue()
+
+
+@then("the token totals and per-model cost appear in the report")
+def _assert_token_report(tok_ctx):
+    agg, out = tok_ctx["agg"], tok_ctx["out"]
+    assert agg["tokens"]["total_input"] == 3000  # 1000 mini + 500 nano, summed over 2 turns
+    assert agg["tokens"]["by_model"]["gpt-5.4-mini"]["output"] == 400
+    assert agg["tokens"]["total_cost_usd"] > 0
+    assert "Token usage & cost" in out
+    assert "gpt-5.4-mini" in out and "gpt-5.4-nano" in out

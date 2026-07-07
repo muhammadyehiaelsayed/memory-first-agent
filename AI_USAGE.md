@@ -119,6 +119,12 @@ chronological log of every instruction:
   (fresh-Redis quickstart crash) and the two security mediums (SSRF-via-redirect, Tavily
   malformed-200 skipping the ddgs fallback) were fixed and mutation-verified; 371 tests,
   traceability gate at 146 functions)
+- `docs/ai_prompts/milestone-11.md` — Milestone 11 (fix all remaining confirmed findings; a
+  file-disjoint editor workflow addressed the rest — concurrent ingest, off-loop trafilatura,
+  pipelined store writes, DNS-resolving SSRF guard, compound-ccTLD diversity, blocked-history
+  fix, token/cost aggregation, a non-vacuous mock grounding eval, a strengthened traceability
+  gate, dep pin + CI secret/dep scans, and doc-truth fixes; four findings deliberately not
+  changed with rationale; 399 tests)
 
 ## 6. What was reviewed, tested, and corrected by hand
 

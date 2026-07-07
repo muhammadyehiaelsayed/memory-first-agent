@@ -61,3 +61,10 @@ Feature: Ingest-content node stores fetched pages for future reuse without ever 
     Then the freshness gate was consulted for the page
     And no summary is requested and nothing is re-stored
     And the page is still chunked for the in-hand answer
+
+  # source: specs/003 I2 (ingestion never gates answering — sanitize/chunk inside the guard)
+  # covers: memagent.nodes.ingest.make_ingest_content
+  Scenario: A page whose chunker blows up degrades to a skipped doc without crashing the turn
+    Given a fetched page whose chunker raises
+    When the ingest content node runs
+    Then the turn still returns with the page skipped and an ingest failure recorded

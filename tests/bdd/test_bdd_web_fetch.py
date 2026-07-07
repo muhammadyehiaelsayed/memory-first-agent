@@ -80,6 +80,22 @@ def _rd_single(rd_results):
     assert rd_results[2] == "localhost"
 
 
+@given(
+    "two hosts belonging to different organisations under the co.uk public suffix",
+    target_fixture="rd_hosts",
+)
+def _rd_compound_hosts():
+    # Compound ccTLD: without the three-label rule both would collapse to "co.uk" and the
+    # per-domain diversity cap would treat these unrelated organisations as one site.
+    return ["bbc.co.uk", "www.guardian.co.uk"]
+
+
+@then("each host keeps three labels and the two organisations stay distinct")
+def _rd_compound(rd_results):
+    assert rd_results == ["bbc.co.uk", "guardian.co.uk"]
+    assert rd_results[0] != rd_results[1]
+
+
 # ---------------------------------------------------------------------------
 # _is_private_host
 # ---------------------------------------------------------------------------
@@ -101,8 +117,41 @@ def _ph_hosts():
 
 
 @when("each host is tested against the private-host guard", target_fixture="ph_results")
-def _ph_test(ph_hosts):
+def _ph_test(ph_hosts, monkeypatch):
+    # No real DNS: the one hostname in the set ("example.com") "resolves" to a public
+    # address so the resolving guard leaves it unflagged offline.
+    monkeypatch.setattr(
+        "socket.getaddrinfo",
+        lambda host, *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0))],
+    )
     return {host: _is_private_host(host) for host in ph_hosts}
+
+
+@given(
+    "a hostname whose DNS record resolves to a private address",
+    target_fixture="rebind_host",
+)
+def _rebind_host(monkeypatch):
+    # No real DNS: the hostname "resolves" to a loopback address, exercising the
+    # hostname->private-IP SSRF vector without touching the network.
+    monkeypatch.setattr(
+        "socket.getaddrinfo",
+        lambda host, *a, **k: [(2, 1, 6, "", ("127.0.0.1", 0))],
+    )
+    return "internal.attacker.example"
+
+
+@when(
+    "the resolving hostname is tested against the private-host guard",
+    target_fixture="rebind_verdict",
+)
+def _rebind_test(rebind_host):
+    return _is_private_host(rebind_host)
+
+
+@then("the resolving hostname is flagged private")
+def _rebind_flagged(rebind_verdict):
+    assert rebind_verdict is True
 
 
 @then("localhost and the private, loopback and link-local IP literals are flagged private")
@@ -116,7 +165,7 @@ def _ph_private(ph_hosts, ph_results):
 @then("a public IP and an unresolved hostname are not flagged")
 def _ph_public(ph_results):
     assert ph_results["8.8.8.8"] is False
-    assert ph_results["example.com"] is False  # hostnames are not DNS-resolved by this guard
+    assert ph_results["example.com"] is False  # resolves (mocked) to a public IP
 
 
 # ---------------------------------------------------------------------------
