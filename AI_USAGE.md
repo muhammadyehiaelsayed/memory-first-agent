@@ -106,6 +106,10 @@ chronological log of every instruction:
 - `docs/ai_prompts/milestone-8.md` — Milestone 8 (delivery-readiness review + fixes → v1.2; a
   live manual e2e run and a 36-agent reviewer-lens file review found 23 findings, all fixed
   incl. three mutation-verified behavior changes)
+- `docs/ai_prompts/milestone-9.md` — Milestone 9 (executable BDD scenarios → v1.3; 45 feature
+  files / 210 scenarios covering all 142 functions, enforced by an AST-based traceability
+  gate, authored by a 32-agent workflow and proven non-vacuous by a 13-agent verification
+  pass with 6/6 source mutants caught; zero source changes)
 
 ## 6. What was reviewed, tested, and corrected by hand
 
