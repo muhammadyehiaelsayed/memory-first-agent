@@ -3,7 +3,7 @@
 ONE shared AsyncOpenAI transport serves all three clients (build_openai_clients);
 max_retries=0 is mandatory because tenacity (M5) is the single retry owner, and every
 network request flows through exactly one private seam per surface (_call/_parse_call)
-so M5's @openai_retry decorates there without touching complete()/parse() bodies.
+so reliability's llm_retry wraps there without touching complete()/parse() bodies.
 base_url supports the GitHub Models free-dev mode.
 """
 
@@ -79,7 +79,7 @@ class OpenAIChatLLM:
         )
         return resp.choices[0].message.parsed, self._usage(resp)
 
-    # --- the one seam per surface (Ruling D): M5 adds @openai_retry HERE, nowhere else ---
+    # --- the one seam per surface (Ruling D): llm_retry wraps HERE, nowhere else ---
     async def _call(self, **kw):
         return await self._client.chat.completions.create(**kw)
 

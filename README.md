@@ -39,8 +39,9 @@ so both are caught). All of this chrome is written to stderr on a real terminal 
 
 `make test` runs 400 keyless tests (408 total with the redis-backed integration/e2e set): unit
 tests plus a 230-scenario BDD layer (pytest-bdd) with one feature file per module. Every one of
-the 150 module-level functions and class methods carries a `# covers:` declaration, enforced bidirectionally by a
-traceability gate — index and matrix in [`docs/BDD.md`](docs/BDD.md).
+the 150 module-level functions and class methods is pinned by a `# covers:` declaration in the
+feature files, enforced bidirectionally by a traceability gate — index and matrix in
+[`docs/BDD.md`](docs/BDD.md).
 
 **No uv?** `pip install -e ".[dev]"` inside a Python 3.12 venv works as a fallback
 (uv + the committed `uv.lock` is the reproducible path).

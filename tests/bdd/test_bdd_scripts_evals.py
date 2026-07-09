@@ -148,7 +148,7 @@ def _hit_banner(ctx):
 
 @then("the web-miss banner announces the web search")
 def _miss_banner(ctx):
-    assert ctx["miss_b"] == "[MEMORY MISS -> searching the web]"
+    assert ctx["miss_b"] == "[MEMORY MISS → searching the web]"
 
 
 @then("any other route is shown verbatim in brackets")
@@ -178,7 +178,7 @@ def _two_turns(ctx):
 
 @then("turn one is a memory miss with a web source")
 def _turn_one(ctx):
-    assert "[MEMORY MISS -> searching the web]" in ctx["md"]
+    assert "[MEMORY MISS → searching the web]" in ctx["md"]
     assert "(web)" in ctx["md"]
 
 

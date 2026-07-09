@@ -45,7 +45,8 @@ eval: eval-lifecycle eval-grounding
 coverage:
 	uv run coverage report
 
-# Mirror the full ci.yml gate set in step order (tested == shipped).
+# Mirror ci.yml's lint/test/eval/coverage steps in order (tested == shipped);
+# ci.yml additionally runs a secret scan and pip-audit before these.
 # The integration leg needs redis:8.2 -- run `make redis-up` first.
 ci: install lint
 	uv run pytest -m "not integration and not e2e" --cov=memagent --cov-report=term

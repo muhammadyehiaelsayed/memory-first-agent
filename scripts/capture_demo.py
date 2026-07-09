@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from memagent.app import Agent
+from memagent.cli import MISS_BANNER
 from memagent.config import Settings
 
 QUESTION = "How does Redis vector search work?"
@@ -20,7 +21,7 @@ def _banner(r) -> str:
     if r.route == "memory_hit":
         return f"[MEMORY HIT sim={r.similarity:.2f}]"
     if r.route == "memory_miss_web_search":
-        return "[MEMORY MISS -> searching the web]"
+        return MISS_BANNER  # the CLI's canonical banner, byte-identical
     return f"[{r.route}]"
 
 

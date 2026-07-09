@@ -257,8 +257,10 @@ async def _ask(query: str, settings: Settings):
 
 @app.command()
 def chat() -> None:
-    """Interactive REPL: streaming turns with a live status, hit/miss banners, and
-    /help, /clear, exit commands (history capped at 6; Ctrl-C stops an answer)."""
+    """Interactive REPL: live status, hit/miss banners, /help, /clear and exit commands.
+
+    History is capped at 6 turns; Ctrl-C stops the current answer.
+    """
     settings = Settings()
     if not settings.openai_api_key:
         typer.echo(

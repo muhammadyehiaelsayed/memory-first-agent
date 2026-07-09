@@ -5,7 +5,8 @@ distance_to_similarity is THE one conversion site in the entire codebase
 metric normalizes internally), so similarity is exactly 1 - d for any inputs.
 
 knn returns the RAW unfiltered top-k (threshold routing lives in routers only).
-Redis-down graceful degradation is M5's — the M2 demo assumes Redis is up.
+Redis-down calls surface as the typed MemoryUnavailableError via the _io translation
+wrapper below; the degraded-route decision itself belongs to the graph's routers.
 """
 
 import hashlib
