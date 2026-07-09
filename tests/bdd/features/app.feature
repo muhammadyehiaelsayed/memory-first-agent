@@ -4,9 +4,10 @@
 # Executable binding: tests/bdd/test_bdd_orchestration.py
 Feature: The Agent facade assembles resources and answers turns (src/memagent/app.py)
   app.py is the public facade tying the whole system together. configure_logging
-  sends operational logs to stderr so stdout stays pipe-clean; new_turn_state mints
-  the one complete initial AgentState for a turn; build_resources assembles the real
-  clients (LLMs, embedder, Redis store, search, fetch, turn logger); and the Agent
+  sends operational logs to stderr so stdout stays pipe-clean; configure_tracing
+  exports the opt-in LangSmith environment (off by default, zero egress); new_turn_state
+  mints the one complete initial AgentState for a turn; build_resources assembles the
+  real clients (LLMs, embedder, Redis store, search, fetch, turn logger); and the Agent
   compiles the graph once and drives a full memory-first turn end to end, returning a
   TurnResult. This is the object the CLI and evals call to realise the root routes.
 
@@ -16,6 +17,21 @@ Feature: The Agent facade assembles resources and answers turns (src/memagent/ap
     When the active structured-logging configuration is inspected
     Then its logger factory writes to stderr rather than stdout
     And the log stream is rendered for the console
+
+  # covers: memagent.app.configure_tracing
+  Scenario: Tracing is off by default so no telemetry leaves the machine
+    Given tracing is configured from settings that never opted in
+    Then tracing reports disabled and exports no LANGSMITH variables
+
+  # covers: memagent.app.configure_tracing
+  Scenario: Setting the tracing flag without an API key still keeps tracing off
+    Given tracing is configured with the flag set but no API key
+    Then tracing reports disabled and exports no LANGSMITH variables
+
+  # covers: memagent.app.configure_tracing
+  Scenario: Opting in to LangSmith exports the tracing environment for the graph run
+    Given tracing is configured with LangSmith enabled and an API key
+    Then tracing reports enabled and exports the four LANGSMITH variables
 
   # covers: memagent.app.new_turn_state
   Scenario: A fresh turn starts allowed, thresholded from settings and unrouted until proven
@@ -31,6 +47,11 @@ Feature: The Agent facade assembles resources and answers turns (src/memagent/ap
     Then the memory store is a Redis-backed store and the embedder matches the configured dimension
     And the searcher is the Tavily-first fallback provider and the fetcher is the httpx page fetcher
     And the same settings object is threaded through the resources
+
+  # covers: memagent.app.build_resources
+  Scenario: Building resources activates opt-in tracing through the real environment
+    Given resources are built from settings that opt in to LangSmith tracing
+    Then the process environment carries the LangSmith opt-in for the graph run
 
   # covers: memagent.app.Agent.__init__
   Scenario: Constructing the agent compiles the graph once and mints a session id

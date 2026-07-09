@@ -1,9 +1,10 @@
-"""Agent facade: build_resources() + Agent.answer() -> TurnResult + logging setup."""
+"""Agent facade: build_resources() + Agent.answer() -> TurnResult + logging/tracing setup."""
 
 import logging
 import os
 import sys
 import time
+from collections.abc import MutableMapping
 from typing import NamedTuple
 from uuid import uuid4
 
@@ -63,6 +64,28 @@ def configure_logging(settings: Settings) -> None:
     )
 
 
+def configure_tracing(settings: Settings, env: MutableMapping[str, str] | None = None) -> bool:
+    """Opt-in LangSmith tracing — off by default, so the default posture stays zero-egress.
+
+    When LANGSMITH_TRACING=true AND an API key is set, export the standard LANGSMITH_*
+    variables so langgraph's built-in instrumentation uploads one trace per turn: the
+    compiled "memagent" graph run with a child span per node, plus the conversation LLM
+    calls (build_openai_clients wraps the shared transport). The export step exists
+    because Settings reads .env itself without touching os.environ, while the langsmith
+    SDK only sees real environment variables. Traces complement — never replace —
+    logs/turns.jsonl, which stays the offline, keyless source of truth for analytics.
+    ``env`` is an injection seam for tests; returns True when tracing was enabled.
+    """
+    target = os.environ if env is None else env
+    if not (settings.langsmith_tracing and settings.langsmith_api_key):
+        return False
+    target["LANGSMITH_TRACING"] = "true"
+    target["LANGSMITH_API_KEY"] = settings.langsmith_api_key
+    target["LANGSMITH_ENDPOINT"] = settings.langsmith_endpoint
+    target["LANGSMITH_PROJECT"] = settings.langsmith_project
+    return True
+
+
 def new_turn_state(
     settings: Settings, session_id: str, query: str, history: list[dict] | None = None
 ) -> dict:
@@ -99,6 +122,7 @@ def new_turn_state(
 
 def build_resources(settings: Settings | None = None) -> AgentResources:
     settings = settings if settings is not None else Settings()
+    configure_tracing(settings)  # before the clients so the wrapped transport is traceable
     chat_llm, analytics_llm, embedder = build_openai_clients(settings)  # ONE shared transport
     assert_index_dims(embedder.dim, settings)
     client = make_redis_client(settings)  # M5: native Retry (3) + 2s socket timeouts

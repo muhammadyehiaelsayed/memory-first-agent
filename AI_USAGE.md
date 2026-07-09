@@ -125,6 +125,12 @@ chronological log of every instruction:
   fix, token/cost aggregation, a non-vacuous mock grounding eval, a strengthened traceability
   gate, dep pin + CI secret/dep scans, and doc-truth fixes; four findings deliberately not
   changed with rationale; 399 tests)
+- `docs/ai_prompts/observability-langsmith.md` — post-delivery observability (opt-in
+  LangSmith tracing layered over the JSONL turn log: `configure_tracing` env export,
+  `wrap_openai` on the shared transport, a named root run; off by default so the keyless
+  suite and CI stay zero-egress; live-verified miss and hit traces via the LangSmith API;
+  an adversarial pre-push review found 6 gaps — all fixed and mutation-verified;
+  404 tests, traceability gate at 147 functions)
 
 ## 6. What was reviewed, tested, and corrected by hand
 
@@ -135,7 +141,8 @@ chronological log of every instruction:
   separator); keys are still `chunk:<id>` and the `doc:*` meta prefix stays un-indexed — the
   double-colon trap the plan warned about is confirmed avoided.
 - Field-count truth-check: `Settings` had 32 fields at M1 (design docs briefly claimed 33;
-  corrected) — now 37 after M8 moved tuning constants into `Settings`.
+  corrected), 37 after M8 moved tuning constants into `Settings` — now 41 with the four
+  opt-in LangSmith fields.
 - M3 live inspection caught that `wipe-memory` left the non-indexed `doc:*` freshness
   metas behind — harmless before M3, but it would have made the freshness gate silently
   skip re-ingestion after a wipe. Fixed in `wipe_index` and re-verified (0 keys post-wipe).

@@ -20,6 +20,8 @@ PLACEHOLDERS: dict[str, str] = {
     "openai_api_key": "sk-...",
     "openai_base_url": "",
     "tavily_api_key": "",
+    "langsmith_tracing": "false",  # dotenv-style bool, not the Python literal `False`
+    "langsmith_api_key": "",
 }
 
 # Inline comments, verbatim from PLAN section 10.3. Comment column starts at char 40.
@@ -31,6 +33,8 @@ COMMENTS: dict[str, str] = {
     "similarity_threshold": "# inclusive; hit <=> 1 - distance >= this",
     "memory_ttl_seconds": "# 7d; 0 disables",
     "wait_cap_scale": "# tests set 0 -> instant retries through prod code path",
+    "langsmith_tracing": "# opt-in: true + key -> one LangSmith trace per turn",
+    "langsmith_api_key": "# optional - blank keeps tracing off (zero egress)",
 }
 
 COMMENT_COLUMN = 39

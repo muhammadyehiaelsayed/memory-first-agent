@@ -400,3 +400,67 @@ def _check_outcome(url_ctx, outcome):
         assert "OPENAI_API_KEY" in str(url_ctx["exc"])
     else:  # pragma: no cover - guards against a mistyped Examples cell
         raise AssertionError(f"unexpected outcome: {outcome!r}")
+
+
+# --------------------------------------------------------------------------- #
+# Scenario: LangSmith wraps the shared transport only when FULLY opted in     #
+# --------------------------------------------------------------------------- #
+@given(
+    "settings that fully opt in to LangSmith tracing, settings that half opt in "
+    "and settings that do not",
+    target_fixture="wrap_ctx",
+)
+def _wrap_ctx():
+    return {
+        "on": Settings(
+            _env_file=None,
+            openai_api_key="sk-test",
+            langsmith_tracing=True,
+            langsmith_api_key="ls-test",
+        ),
+        # the AND gate's documented boundary: flag set, key blank -> tracing stays off
+        "half": Settings(
+            _env_file=None,
+            openai_api_key="sk-test",
+            langsmith_tracing=True,
+            langsmith_api_key="",
+        ),
+        "off": Settings(
+            _env_file=None,
+            openai_api_key="sk-test",
+            langsmith_tracing=False,
+            langsmith_api_key="",
+        ),
+    }
+
+
+@when("the OpenAI clients are built for each configuration")
+def _build_each_configuration(wrap_ctx, monkeypatch):
+    wrapped: list = []
+
+    def _recording_wrap(client):  # stands in for langsmith.wrappers.wrap_openai (no upload)
+        wrapped.append(client)
+        return client
+
+    monkeypatch.setattr("langsmith.wrappers.wrap_openai", _recording_wrap)
+    conv_on, _analytics, _embedder = build_openai_clients(wrap_ctx["on"])
+    wrap_ctx["wrapped_on"] = list(wrapped)
+    wrap_ctx["conv_on"] = conv_on
+    for kind in ("half", "off"):
+        wrapped.clear()
+        build_openai_clients(wrap_ctx[kind])
+        wrap_ctx[f"wrapped_{kind}"] = list(wrapped)
+
+
+@then(
+    "the fully-opted-in build passes the shared transport through the LangSmith wrapper "
+    "exactly once"
+)
+def _wrapped_exactly_once(wrap_ctx):
+    assert wrap_ctx["wrapped_on"] == [wrap_ctx["conv_on"]._client]
+
+
+@then("neither the tracing-off build nor the keyless half-opt-in ever touches the wrapper")
+def _wrapper_untouched(wrap_ctx):
+    assert wrap_ctx["wrapped_off"] == []
+    assert wrap_ctx["wrapped_half"] == []

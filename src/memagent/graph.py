@@ -78,4 +78,4 @@ def build_graph(resources: AgentResources):
     sg.add_edge("answer_from_web", "log_turn")
     sg.add_edge("answer_failure", "log_turn")
     sg.add_edge("log_turn", END)
-    return sg.compile()
+    return sg.compile(name="memagent")  # the root run name in opt-in LangSmith traces
