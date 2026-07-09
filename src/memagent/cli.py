@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 import json
 import sys
+import threading
 from pathlib import Path
 
 import typer
@@ -57,38 +58,64 @@ def _emit(text: str, color: str | None = None, *, markdown: bool = False) -> Non
         typer.echo(text)
 
 
-def _advance_status(status, node: str, update: dict, merged: dict) -> None:
-    """Move the spinner label to the step that follows the node that just finished.
+def status_label(node: str, update: dict, merged: dict) -> tuple[str, str] | None:
+    """Map a just-finished node + the decision it took to a friendly (label, colour)
+    for the live spinner, or None when there is nothing to narrate.
 
-    ``astream`` fires only AFTER a node completes, so the label names the work now in
-    flight, inferred from graph topology. A no-op when there is no live spinner.
+    Pure and side-effect-free (``_advance_status`` renders it). ``astream`` fires only
+    AFTER a node completes, so each label names the work now in flight and folds in the
+    decision that node just made — the friendly "which step / what did it decide" the
+    user asked for, in one line. The locked step names ("Found in memory (sim …)",
+    "searching the web", "Reading N pages") stay verbatim inside the friendly text so the
+    spinner reads the same as the banner that follows.
     """
-    if status is None:
-        return
-
-    def show(text: str, color: str = "cyan") -> None:
-        status.update(f"[{color}]{text}…[/]")
-
-    if node == "guard_input":
+    if node in {"guard_input", "embed_query"}:
         if update.get("route") == "blocked":
-            show("Blocked by input guard", "red")
-        else:
-            show("Checking memory")
-    elif node == "embed_query":
-        show("Checking memory")
-    elif node == "memory_search":
+            return "🛑 Blocked by the input guard", "red"
+        return "🧠 Checking memory", "cyan"
+    if node == "memory_search":
         if update.get("degradation") == "redis_down":
-            show("Memory offline — searching the web", "yellow")
-        elif route_after_memory(merged) == "answer_from_memory":
+            return "📴 Memory offline — searching the web", "yellow"
+        if route_after_memory(merged) == "answer_from_memory":
             sim = update.get("top_similarity") or 0.0
-            show(f"Found in memory (sim {sim:.2f}) — writing answer", "green")
-        else:
-            show("Not in memory — searching the web", "yellow")
-    elif node == "web_search":
+            return f"✅ Found in memory (sim {sim:.2f}) — writing your answer", "green"
+        return "🌐 Not in memory — searching the web", "yellow"
+    if node == "web_search":
         n = len(merged.get("search_results") or [])
-        show(f"Reading {n} page{'' if n == 1 else 's'}")
-    elif node in {"fetch_pages", "ingest_content"}:
-        show("Writing answer")
+        return f"📄 Reading {n} page{'' if n == 1 else 's'}", "cyan"
+    if node in {"fetch_pages", "ingest_content"}:
+        return "✍️ Writing your answer", "cyan"
+    return None  # answer_from_* / log_turn: the spinner is about to stop, nothing to say
+
+
+def _advance_status(status, node: str, update: dict, merged: dict) -> None:
+    """Render the friendly label for the step now in flight onto the live spinner.
+
+    A no-op when there is no spinner (piped/captured run) or nothing to narrate.
+    """
+    res = status_label(node, update, merged)
+    if status is not None and res is not None:
+        label, color = res
+        status.update(f"[{color}]{label}…[/]")
+
+
+def chat_help_text() -> str:
+    """The greeting + command list + stop hint shown in the chat REPL (rich markup).
+
+    Returned as ONE string so the welcome panel (at start) and the `/help` command render
+    byte-identically. It names every command and BOTH ways to stop — `exit`/`quit`/Ctrl-D
+    to leave, Ctrl-C to cancel an in-flight answer — so the user is never stuck wondering
+    how to get out or what else they can do.
+    """
+    return (
+        "[dim]Hi! Ask me anything — I check what I already know first,\n"
+        "then search the web when it's something new.[/]\n\n"
+        "[bold]Commands[/]\n"
+        "  [bold cyan]/help[/]    show this message again\n"
+        "  [bold cyan]/clear[/]   clear the screen & forget this chat\n"
+        "  [bold cyan]exit[/]     leave  ·  also: [bold cyan]quit[/], or [bold cyan]Ctrl-D[/]\n\n"
+        "[dim]While I'm answering, press [/][bold cyan]Ctrl-C[/][dim] to stop and ask again.[/]"
+    )
 
 
 async def _stream_turn(agent, state: dict) -> tuple[dict, dict | None, bool]:
@@ -102,7 +129,7 @@ async def _stream_turn(agent, state: dict) -> tuple[dict, dict | None, bool]:
     mem_update: dict | None = None
     blocked = False
     spinner = (
-        _err.status("[cyan]Checking memory…[/]", spinner="dots")
+        _err.status("[cyan]🧠 Checking memory…[/]", spinner="dots")
         if sys.stderr.isatty()
         else contextlib.nullcontext()
     )
@@ -230,7 +257,8 @@ async def _ask(query: str, settings: Settings):
 
 @app.command()
 def chat() -> None:
-    """Interactive REPL: streaming turns with hit/miss banners, history capped at 6."""
+    """Interactive REPL: streaming turns with a live status, hit/miss banners, and
+    /help, /clear, exit commands (history capped at 6; Ctrl-C stops an answer)."""
     settings = Settings()
     if not settings.openai_api_key:
         typer.echo(
@@ -241,6 +269,10 @@ def chat() -> None:
         raise typer.Exit(code=1)
     try:
         asyncio.run(_chat(settings))
+    except KeyboardInterrupt:  # a race-timed Ctrl-C during teardown never shows a traceback
+        if sys.stderr.isatty():
+            _err.print("")
+        raise typer.Exit(code=130) from None
     except REDIS_DOWN_ERRORS as exc:
         _exit_redis_down(settings, exc)
     except RedisSearchError as exc:
@@ -260,24 +292,106 @@ async def _chat(settings: Settings) -> None:
     await agent.ensure_ready()  # REPL drives the graph directly, so provision the index here
     history: list[dict] = []
     tty = sys.stdout.isatty()
-    # A blank line before each prompt separates turns; colour the prompt only on a TTY.
-    prompt = "\n\x1b[1;36myou>\x1b[0m " if tty else "you> "
-    typer.echo("memagent chat — ask a question; exit/quit or Ctrl-D to leave.")
+    err_tty = sys.stderr.isatty()
+
+    def show_help() -> None:
+        """Render the welcome/help panel to stderr (TTY only) — never touches stdout."""
+        if not err_tty:
+            return
+        from rich import box
+        from rich.panel import Panel
+        from rich.text import Text
+
+        _err.print(
+            Panel(
+                Text.from_markup(chat_help_text()),
+                box=box.ROUNDED,
+                border_style="cyan",
+                title="memagent 🧠 · memory-first chat",
+                title_align="left",
+                padding=(1, 2),
+            )
+        )
+
+    async def read_line() -> str:
+        """Read one input line on a DAEMON thread, awaitably.
+
+        A real Ctrl-C under asyncio's Runner cancels the awaiting task (raising
+        CancelledError here), NOT the blocking read in the worker thread. Using a daemon
+        reader means that abandoned read can never hang process exit — so leaving the chat
+        stays instant even if the interpreter tears down while a read is still parked.
+        """
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future[str] = loop.create_future()
+
+        def reader() -> None:
+            try:
+                text = input("")
+            except Exception as exc:  # noqa: BLE001 — forward EOF/etc. to the awaiter
+                loop.call_soon_threadsafe(fut.set_exception, exc)
+            else:
+                loop.call_soon_threadsafe(fut.set_result, text)
+
+        threading.Thread(target=reader, daemon=True).start()
+        return await fut
+
+    def stop_current_task() -> None:
+        """Balance the Runner's task.cancel() from a Ctrl-C so the loop can keep going."""
+        task = asyncio.current_task()
+        if task is not None:
+            task.uncancel()
+
+    show_help()
     while True:
+        # The prompt is written to STDERR (never input()'s arg, which would leak it to
+        # stdout) so a piped `chat` stays byte-identical; a blank line separates turns.
+        if err_tty:
+            _err.print("\n[bold cyan]you> [/]", end="")
         try:
-            query = (await asyncio.to_thread(input, prompt)).strip()
-        except EOFError:
-            typer.echo("")
+            query = (await read_line()).strip()
+        except EOFError:  # Ctrl-D — leave cleanly, no stdout write
+            if err_tty:
+                _err.print("[dim]👋 bye[/]")
+            return
+        except (KeyboardInterrupt, asyncio.CancelledError):  # Ctrl-C at the idle prompt: leave
+            stop_current_task()
+            if err_tty:
+                _err.print("[dim]👋 bye[/]")
             return
         if not query:
             continue
-        if query.lower() in {"exit", "quit"}:
+        low = query.lower()
+        if low in {"exit", "quit"}:
+            if err_tty:
+                _err.print("[dim]👋 bye[/]")
             return
+        if low in {"/help", "help", "?"}:  # whole-input match: "help me with X" is a question
+            show_help()
+            continue
+        if low == "/clear":
+            history[:] = []  # forget this chat's context; long-term Redis memory is untouched
+            if err_tty:
+                _err.clear()
+                _err.print(
+                    "[dim]🧹 Cleared this chat — long-term memory is kept. /help for commands.[/]"
+                )
+            continue
+        if low.startswith("/"):
+            if err_tty:
+                _err.print(f"[dim]Unknown command '{query}' — type /help to see what I can do.[/]")
+            continue
         state = new_turn_state(settings, agent.session_id, query, history)
         # The REPL bypasses Agent.answer(), so it binds its own turn_id (FR-M4-21).
         structlog.contextvars.bind_contextvars(turn_id=state["turn_id"])
         try:
             merged, mem_update, blocked = await _stream_turn(agent, state)
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            # Ctrl-C mid-answer cancels ONLY this turn (a real SIGINT arrives as
+            # CancelledError under asyncio.Runner); the turn is discarded, nothing stored.
+            stop_current_task()
+            if err_tty:
+                _err.print("[dim]⏹ Stopped — ask me something else.[/]")
+            continue
         finally:
             structlog.contextvars.clear_contextvars()
         # The spinner is stopped now, so these stdout lines never interleave with it.

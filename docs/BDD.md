@@ -1,8 +1,8 @@
 # BDD Scenarios — Behavior Coverage for Every Python Function
 
 The agent's behavior is specified as executable Gherkin. **Every module-level
-function and class method in `src/` and `scripts/` (148 functions) has its own
-BDD scenario** (227 scenarios across 45 feature files), each derived from
+function and class method in `src/` and `scripts/` (150 functions) has its own
+BDD scenario** (230 scenarios across 45 feature files), each derived from
 the root feature `tests/bdd/features/00_main_functionality.feature` — the main
 functionality (memory-first answering over the five routes: `memory_hit`,
 `memory_miss_web_search`, `degraded_web`, `blocked`, `failed`).
@@ -46,7 +46,7 @@ of the suite — no separate BDD runner.
 | `analytics_report.feature` | `src/memagent/analytics/report.py` | "Log exactly one analytics record for every turn" | 5 | `tests/bdd/test_bdd_analytics.py` |
 | `analytics_turnlog.feature` | `src/memagent/analytics/turnlog.py` | "Log exactly one analytics record for every turn" | 5 | `tests/bdd/test_bdd_analytics.py` |
 | `app.feature` | `src/memagent/app.py` | "Fall back to the web and ingest what was found on a memory miss" | 10 | `tests/bdd/test_bdd_orchestration.py` |
-| `cli.feature` | `src/memagent/cli.py` | "Answer from memory when a similar question was seen before" | 24 | `tests/bdd/test_bdd_cli.py` |
+| `cli.feature` | `src/memagent/cli.py` | "Answer from memory when a similar question was seen before" | 27 | `tests/bdd/test_bdd_cli.py` |
 | `config.feature` | `src/memagent/config.py` | "Answer from memory when a similar question was seen before" | 4 | `tests/bdd/test_bdd_contracts.py` |
 | `graph.feature` | `src/memagent/graph.py` | "Block malicious input at the guard before any model call" | 2 | `tests/bdd/test_bdd_orchestration.py` |
 | `interfaces.feature` | `src/memagent/interfaces.py` | "Answer from memory when a similar question was seen before" | 10 | `tests/bdd/test_bdd_contracts.py` |
@@ -88,7 +88,7 @@ of the suite — no separate BDD runner.
 
 ## Function → scenario traceability matrix
 
-219 coverage declarations for 148 functions.
+222 coverage declarations for 150 functions.
 
 | Function | Scenario | Feature file |
 |---|---|---|
@@ -125,6 +125,7 @@ of the suite — no separate BDD runner.
 | `memagent.cli._advance_status` | The live status names the step that runs next as each node finishes | `cli.feature` |
 | `memagent.cli._ask` | A single question is answered through the agent facade | `cli.feature` |
 | `memagent.cli._chat` | A blocked chat turn is refused and never re-enters replayed history | `cli.feature` |
+| `memagent.cli._chat` | A cancelled turn (Ctrl-C) is discarded and the chat keeps going | `cli.feature` |
 | `memagent.cli._chat` | A failed turn shows one clean error, never a hit banner then an apology | `cli.feature` |
 | `memagent.cli._chat` | The chat REPL prints the hit banner, the answer, and its sources | `cli.feature` |
 | `memagent.cli._emit` | Emitting to a non-terminal stdout stays byte-identical plain text | `cli.feature` |
@@ -145,6 +146,8 @@ of the suite — no separate BDD runner.
 | `memagent.cli.ask` | ask surfaces a Redis outage as a friendly error and non-zero exit | `cli.feature` |
 | `memagent.cli.chat` | chat refuses to start without an OpenAI key | `cli.feature` |
 | `memagent.cli.chat` | chat starts the interactive REPL when a key is configured | `cli.feature` |
+| `memagent.cli.chat_help_text` | The chat help lists every command and both ways to stop | `cli.feature` |
+| `memagent.cli.status_label` | status_label narrates each decision, colours it, and keeps the locked step names | `cli.feature` |
 | `memagent.cli.wipe_memory` | wipe-memory reports a friendly error when Redis is unreachable | `cli.feature` |
 | `memagent.graph.build_graph` | The graph screens input at the entry and can short-circuit a block to logging | `graph.feature` |
 | `memagent.graph.build_graph` | The graph searches memory before the web and drains every path into logging | `graph.feature` |

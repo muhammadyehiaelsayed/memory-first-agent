@@ -7,7 +7,8 @@ Keyless by construction: no real network, no Redis, no OpenAI key.
     ``memagent.app.Agent`` facade), mirroring tests/unit/test_smoke.py's keyless
     posture and tests/e2e/test_lifecycle.py's route/source presentation.
   * The private helpers and coroutines (``_hit_banner``, ``_print_sources``, ``_emit``,
-    ``_advance_status``, ``_stream_turn``, ``_exit_redis_down``, ``_wipe``, ``_ask``, ``_chat``) are called directly and
+    ``status_label``, ``chat_help_text``, ``_advance_status``, ``_stream_turn``,
+    ``_exit_redis_down``, ``_wipe``, ``_ask``, ``_chat``) are called directly and
     their real stdout/stderr/return values are asserted.
 
 pytest-bdd steps are sync, so coroutines are driven with asyncio.run(); output from
@@ -196,6 +197,35 @@ class _FakeFailingChatAgent:
         return None
 
 
+class _FakeCancelChatGraph:
+    """Turn 1 is cancelled mid-answer (a real Ctrl-C arrives as CancelledError under
+    asyncio.Runner); turn 2 answers normally — proving a cancel discards only that turn."""
+
+    def __init__(self):
+        self.calls = 0
+
+    async def astream(self, state, stream_mode="updates"):
+        self.calls += 1
+        if self.calls == 1:
+            raise asyncio.CancelledError  # the yield below makes this an async generator
+        yield {
+            "answer_from_web": {
+                "route": "memory_miss_web_search",
+                "answer": "Answer after the cancelled one.",
+                "sources": [],
+            }
+        }
+
+
+class _FakeCancelChatAgent:
+    def __init__(self, resources=None):
+        self.session_id = "sess-test"
+        self.graph = _FakeCancelChatGraph()
+
+    async def ensure_ready(self):
+        return None
+
+
 def _make_input(values):
     it = iter(values)
 
@@ -341,6 +371,17 @@ def _given_input(monkeypatch, sentinel):
 def _given_failing_chat_agent(monkeypatch):
     monkeypatch.setattr(app_mod, "Agent", _FakeFailingChatAgent)
     monkeypatch.setattr(app_mod, "configure_logging", lambda s: None)
+
+
+@given("a stubbed agent whose first turn is cancelled mid-answer and whose next turn answers")
+def _given_cancel_chat_agent(monkeypatch):
+    monkeypatch.setattr(app_mod, "Agent", _FakeCancelChatAgent)
+    monkeypatch.setattr(app_mod, "configure_logging", lambda s: None)
+
+
+@given('the user types one question, then another, then "exit"')
+def _given_two_then_exit(monkeypatch):
+    monkeypatch.setattr("builtins.input", _make_input([QUESTION, "a follow-up question", "exit"]))
 
 
 @given("a stubbed agent that blocks the first question and answers the next")
@@ -631,3 +672,57 @@ def _then_merged_state(ctx, route):
 def _then_mem_update_returned(ctx):
     assert ctx["mem_update"]["top_similarity"] == 0.9, ctx["mem_update"]
     assert ctx["blocked"] is False
+
+
+# ---------------------------------------------------------------------------
+# status_label (pure) and chat_help_text (pure)
+# ---------------------------------------------------------------------------
+@given("a turn state at the default threshold")
+def _given_label_state(ctx):
+    ctx["merged"] = {"threshold": 0.7, "top_similarity": None, "search_results": []}
+
+
+@when(parsers.parse("status_label is asked about a memory hit with similarity {sim:f}"))
+def _when_label_hit(ctx, sim):
+    ctx["merged"]["top_similarity"] = sim
+    ctx["label"] = cli.status_label("memory_search", {"top_similarity": sim}, ctx["merged"])
+
+
+@when("status_label is asked about a memory miss")
+def _when_label_miss(ctx):
+    ctx["merged"]["top_similarity"] = 0.1
+    ctx["label"] = cli.status_label("memory_search", {"top_similarity": 0.1}, ctx["merged"])
+
+
+@when(parsers.parse("status_label is asked about a web search with {n:d} results"))
+def _when_label_web(ctx, n):
+    ctx["merged"]["search_results"] = [{} for _ in range(n)]
+    ctx["label"] = cli.status_label("web_search", {}, ctx["merged"])
+
+
+@when("status_label is asked about a terminal answer node")
+def _when_label_terminal(ctx):
+    ctx["label"] = cli.status_label("answer_from_memory", {}, ctx["merged"])
+
+
+@then(parsers.parse('it returns a {color} label containing "{text}"'))
+def _then_label_is(ctx, color, text):
+    label, got_color = ctx["label"]
+    assert got_color == color, (got_color, color)
+    assert text in label, (text, label)
+
+
+@then("it returns nothing to narrate")
+def _then_label_none(ctx):
+    assert ctx["label"] is None
+
+
+@when("the chat help text is built")
+def _when_help_text(ctx):
+    ctx["help"] = cli.chat_help_text()
+
+
+@then("it names every command and both ways to stop")
+def _then_help_complete(ctx):
+    for token in ("/help", "/clear", "exit", "quit", "Ctrl-D", "Ctrl-C"):
+        assert token in ctx["help"], (token, ctx["help"])

@@ -40,6 +40,23 @@ Feature: Command-line interface (src/memagent/cli.py)
     When the web search returns 3 results
     Then the status label mentions "Reading 3 pages"
 
+  # covers: memagent.cli.status_label
+  Scenario: status_label narrates each decision, colours it, and keeps the locked step names
+    Given a turn state at the default threshold
+    When status_label is asked about a memory hit with similarity 0.83
+    Then it returns a green label containing "Found in memory (sim 0.83)"
+    When status_label is asked about a memory miss
+    Then it returns a yellow label containing "searching the web"
+    When status_label is asked about a web search with 3 results
+    Then it returns a cyan label containing "Reading 3 pages"
+    When status_label is asked about a terminal answer node
+    Then it returns nothing to narrate
+
+  # covers: memagent.cli.chat_help_text
+  Scenario: The chat help lists every command and both ways to stop
+    When the chat help text is built
+    Then it names every command and both ways to stop
+
   # covers: memagent.cli._stream_turn
   Scenario: Streaming a turn returns the merged state, the memory-search update, and the block flag
     Given a stubbed streaming agent and a fresh turn state
@@ -159,6 +176,14 @@ Feature: Command-line interface (src/memagent/cli.py)
     When the chat REPL runs
     Then stdout contains "a required step failed"
     And stdout does not contain "MEMORY HIT"
+
+  # covers: memagent.cli._chat
+  Scenario: A cancelled turn (Ctrl-C) is discarded and the chat keeps going
+    Given a stubbed agent whose first turn is cancelled mid-answer and whose next turn answers
+    And the user types one question, then another, then "exit"
+    When the chat REPL runs
+    Then stdout contains "Answer after the cancelled one."
+    And stdout does not contain "Traceback"
 
   # source: milestone-3-langgraph-guardrails.md :: an L1-blocked payload never enters replayed chat history
   # covers: memagent.cli._chat
