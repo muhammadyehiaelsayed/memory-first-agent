@@ -12,18 +12,13 @@ from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
+# Pricing lives with the record schema (turnlog.cost_usd): one table serves the per-turn
+# cost_usd field and this aggregate, so the two cost figures cannot drift.
+from memagent.analytics.turnlog import cost_usd
+
 # Hit-rate denominator: turns where memory was actually consulted (specs/004 research D10).
 # blocked/failed and redis_down-degraded turns never reached a memory lookup.
 _LOOKUP_ROUTES = ("memory_hit", "memory_miss_web_search")
-
-# Documented per-1M-token prices (USD), verified against the official OpenAI pricing page
-# (MODEL_CHOICES.md / docs/verification-2026-07-06.md): (input, output). Models absent here
-# are still token-counted; their cost simply shows as 0 rather than guessing an unknown price.
-_MODEL_PRICES_PER_1M = {
-    "gpt-5.4-mini": (0.75, 4.50),
-    "gpt-5.4-nano": (0.20, 1.25),
-    "text-embedding-3-small": (0.02, 0.0),
-}
 
 
 def _is_lookup(record: dict) -> bool:
@@ -38,10 +33,6 @@ def aggregate(records: Iterable[dict]) -> dict:
     # bounded single-user local-CLI assumption; a long-lived multi-user deployment would want a
     # streaming pass instead (specs YAGNI — not built speculatively).
     recs = list(records)
-
-    def _cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:
-        in_price, out_price = _MODEL_PRICES_PER_1M.get(model, (0.0, 0.0))
-        return (input_tokens * in_price + output_tokens * out_price) / 1_000_000
 
     topics: Counter = Counter()
     categories: Counter = Counter()
@@ -81,7 +72,7 @@ def aggregate(records: Iterable[dict]) -> dict:
         model: {
             "input": tokens_in[model],
             "output": tokens_out[model],
-            "cost_usd": round(_cost_usd(model, tokens_in[model], tokens_out[model]), 6),
+            "cost_usd": round(cost_usd(model, tokens_in[model], tokens_out[model]), 6),
         }
         for model in sorted(set(tokens_in) | set(tokens_out))
     }

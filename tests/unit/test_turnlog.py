@@ -28,6 +28,7 @@ RECORD_KEYS = {
     "sources",
     "latency_ms",
     "tokens",
+    "cost_usd",
     "guardrail",
     "errors",
     "analytics",

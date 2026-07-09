@@ -1,4 +1,4 @@
-# Observability — opt-in LangSmith tracing (appended 2026-07-09)
+# Observability — opt-in LangSmith tracing + per-turn cost (appended 2026-07-09)
 
 A post-delivery addition on the `observability-langsmith` branch. After the final-polish
 merge, the user asked to layer LangSmith tracing on top of the existing JSONL turn log.
@@ -72,3 +72,20 @@ truth — then an independent skeptic per finding) confirmed 6 gaps, all fixed b
 README (new "Optional LangSmith tracing" section with the stated egress trade-off, test
 counts), `docs/BDD.md` (counts, index rows, matrix rows), `.env.example` (regenerated),
 `AI_USAGE.md` (this record's index entry + the `Settings` field-count truth-check).
+
+## 6. Follow-up instruction (same day, verbatim)
+
+1. "can you add the cost as well in all logs local and langsmit"
+
+Per-turn USD cost added to both sinks from ONE pricing site: `_MODEL_PRICES_PER_1M` and
+`cost_usd()` moved to `analytics/turnlog.py` (the record-schema owner); the aggregate in
+`report.py` now imports it, so per-turn and aggregate cost cannot drift. Every turn record
+gains a top-level `cost_usd` (after `tokens`; unpriced models — including the $0 GitHub
+Models dev aliases — contribute 0, never a guess). `log_turn` writes the same figure into
+graph state (new `cost_usd` state channel, initialised in `new_turn_state`), so an opt-in
+LangSmith trace shows it on the `log_turn` span outputs and the root run's final state —
+verified live against the LangSmith API and the JSONL record of the same turn.
+`logs/turns.sample.jsonl` regenerated with priced records. +1 scenario / extended two
+others; mutations (a wrong table price, dropping the record field, dropping the
+state write) each turn tests red. 397 keyless / 405 total; gate 148 functions /
+227 scenarios.

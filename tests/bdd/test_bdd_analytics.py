@@ -61,6 +61,7 @@ RECORD_KEYS = {
     "sources",
     "latency_ms",
     "tokens",
+    "cost_usd",
     "guardrail",
     "errors",
     "analytics",
@@ -219,6 +220,13 @@ def _assert_full_record(log_ctx):
     assert log_ctx["updates"]["analytics"] is VALID_CLF
 
 
+@then("the node's state update carries the turn's cost for the trace")
+def _assert_updates_cost(log_ctx):
+    # answer 2311/402 on gpt-5.4-mini + classify 198/36 on gpt-5.4-nano, per the price table:
+    # (2311*0.75 + 402*4.50 + 198*0.20 + 36*1.25) / 1e6 — the same figure as the JSONL record.
+    assert log_ctx["updates"]["cost_usd"] == 0.003627
+
+
 @then('the recorded turn names the "blocked" route with a block verdict')
 def _assert_blocked_record(log_ctx):
     lines = _read_lines(log_ctx["path"])
@@ -337,6 +345,19 @@ def _assert_summary_bucket(record_ctx):
     tokens = record_ctx["record"]["tokens"]
     assert tokens["summary_llm"] == {"model": "gpt-5.4-nano", "input": 800, "output": 150}
     assert tokens["answer_llm"]["input"] == 2311  # answer tokens still recorded alongside
+
+
+@then("the record's cost equals the documented per-million prices applied to its buckets")
+def _assert_record_cost(record_ctx):
+    # answer: gpt-5.4-mini 2311/402; folded summaries: gpt-5.4-nano 800/150 — hand-computed
+    # from the documented table so a price or formula regression fails here, not tautologically.
+    assert record_ctx["record"]["cost_usd"] == 0.00389
+
+
+@then("a turn with no token usage costs exactly zero")
+def _assert_zero_cost():
+    zero = build_turn_record(_make_state("memory_hit"), Settings(_env_file=None))
+    assert zero["cost_usd"] == 0.0
 
 
 # ===========================================================================

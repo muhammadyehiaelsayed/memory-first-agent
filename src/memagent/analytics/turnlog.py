@@ -1,7 +1,11 @@
-"""JSONL TurnLogger + build_turn_record (M4, verbatim PLAN section 8.2 schema).
+"""JSONL TurnLogger + build_turn_record + cost_usd (M4; PLAN section 8.2 schema plus the
+post-delivery per-turn cost_usd field).
 
 logs/turns.jsonl is the turn log's SINGLE source of truth (Constitution P-IV): exactly one
-appended JSON line per turn, no Redis mirror, analytics read these records only.
+appended JSON line per turn, no Redis mirror, analytics read these records only. Pricing
+lives here with the record schema: cost_usd is the ONE conversion from token counts to
+USD, called by build_turn_record (per-turn cost_usd field) and by the analytics aggregate,
+so the two figures cannot drift.
 """
 
 import hashlib
@@ -13,6 +17,21 @@ from memagent.config import Settings
 
 # route values whose turns touched the web pipeline -> record a web block
 _WEB_ROUTES = ("memory_miss_web_search", "degraded_web")
+
+# Documented per-1M-token prices (USD), verified against the official OpenAI pricing page
+# (MODEL_CHOICES.md / docs/verification-2026-07-06.md): (input, output). Models absent here
+# are still token-counted; their cost simply shows as 0 rather than guessing an unknown
+# price — the GitHub Models free-dev aliases (openai/gpt-4.1-*) genuinely cost $0.
+_MODEL_PRICES_PER_1M = {
+    "gpt-5.4-mini": (0.75, 4.50),
+    "gpt-5.4-nano": (0.20, 1.25),
+    "text-embedding-3-small": (0.02, 0.0),
+}
+
+
+def cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:
+    in_price, out_price = _MODEL_PRICES_PER_1M.get(model, (0.0, 0.0))
+    return (input_tokens * in_price + output_tokens * out_price) / 1_000_000
 
 
 class TurnLogger:
@@ -59,6 +78,11 @@ def build_turn_record(state: dict, settings: Settings) -> dict:
             "input": sum(u["input_tokens"] for u in summary_usages),
             "output": sum(u["output_tokens"] for u in summary_usages),
         }
+    # Whole-turn USD cost over every recorded bucket (answer/analytics/summary). Unpriced
+    # models contribute 0 (see _MODEL_PRICES_PER_1M), so the field is honest, never guessed.
+    turn_cost = round(
+        sum(cost_usd(b["model"], b["input"], b["output"]) for b in tokens.values()), 6
+    )
     analytics = state.get("analytics")
     return {
         "turn_id": state["turn_id"],
@@ -77,6 +101,7 @@ def build_turn_record(state: dict, settings: Settings) -> dict:
         "sources": list(state.get("sources", [])),
         "latency_ms": dict(state.get("latency_ms", {})),
         "tokens": tokens,
+        "cost_usd": turn_cost,
         "guardrail": {
             "verdict": state.get("guard_verdict", "allow"),
             "events": list(state.get("guardrail_events", [])),

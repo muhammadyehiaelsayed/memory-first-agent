@@ -45,6 +45,9 @@ def make_log_turn(resources):
                 "latency_ms": {**state.get("latency_ms", {}), **latency},
             }
             record = build_turn_record(merged, resources.settings)
+            # Cost flows back into state so a LangSmith trace (opt-in) shows the turn's
+            # USD cost on this node's outputs and on the root run — same figure as JSONL.
+            updates["cost_usd"] = record["cost_usd"]
             # TurnLogger.log does a synchronous file append; offload it so the blocking write
             # never stalls the event loop (matters once the graph is driven concurrently).
             await asyncio.to_thread(resources.turn_logger.log, record)

@@ -16,6 +16,7 @@ Feature: Per-turn analytics logging node (src/memagent/nodes/log.py)
     Given a completed web-search turn carrying answer tokens and a working turn logger
     When the log-turn node runs
     Then exactly one record is appended carrying total latency, the classify stage, the merged answer tokens, and the classification
+    And the node's state update carries the turn's cost for the trace
 
   # source: milestone-4-llms-logging-analytics.md :: a blocked turn is still logged
   # covers: memagent.nodes.log.make_log_turn

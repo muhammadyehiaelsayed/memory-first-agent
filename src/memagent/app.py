@@ -115,6 +115,7 @@ def new_turn_state(
         "latency_ms": {},
         "analytics": None,
         "tokens": {},
+        "cost_usd": None,
         "turn_started_at": time.perf_counter(),  # feeds latency_ms.total (log_turn)
         "search_provider": None,
     }
