@@ -23,6 +23,22 @@ from memagent.config import Settings
 from memagent.interfaces import CompletionResult
 
 
+# ---- no trace egress, ever (autouse) -----------------------------------------
+@pytest.fixture(autouse=True)
+def _no_trace_egress(monkeypatch):
+    """The suite never uploads a trace, whatever the developer's shell or .env says.
+
+    langgraph decides tracing from the REAL os.environ at graph-run time, so a
+    shell-exported LANGSMITH_TRACING=true would otherwise make every compiled-graph
+    test (guardrails, reliability, e2e) egress FakeLLM turns to LangSmith's cloud.
+    Pinning here (autouse, all tests) also keeps the tracing scenarios deterministic:
+    Settings(_env_file=None) still reads process env vars.
+    """
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    for var in ("LANGSMITH_API_KEY", "LANGSMITH_ENDPOINT", "LANGSMITH_PROJECT"):
+        monkeypatch.delenv(var, raising=False)
+
+
 # ---- zero-wait settings (FR-001) --------------------------------------------
 @pytest.fixture
 def settings(tmp_path, monkeypatch):

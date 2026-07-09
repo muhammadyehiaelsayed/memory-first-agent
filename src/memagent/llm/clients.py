@@ -99,6 +99,10 @@ def build_openai_clients(settings: Settings) -> tuple[OpenAIChatLLM, OpenAIChatL
         max_retries=0,
         timeout=float(settings.llm_timeout_s),
     )
+    if settings.langsmith_tracing and settings.langsmith_api_key:  # same gate as configure_tracing
+        from langsmith.wrappers import wrap_openai  # lazy: tracing-off runs never import it
+
+        client = wrap_openai(client)  # chat create/parse become LLM spans inside node traces
     retrying = llm_retry(settings)
     conversation = OpenAIChatLLM(
         client,

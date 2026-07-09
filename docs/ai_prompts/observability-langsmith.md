@@ -1,0 +1,74 @@
+# Observability — opt-in LangSmith tracing (appended 2026-07-09)
+
+A post-delivery addition on the `observability-langsmith` branch. After the final-polish
+merge, the user asked to layer LangSmith tracing on top of the existing JSONL turn log.
+Tooling: Claude Code (Fable 5), with a verification workflow (parallel review + docs-audit
+subagents) before push.
+
+## 1. Instruction (user-issued, verbatim)
+
+1. "if i want to use langsmith for obsivability is it free" / "does it requre credit card" /
+   "can i add both the curren way and langsmith"
+2. "here is the inforamtion LANGSMITH_TRACING=true … make sure you make all nessry logs
+   using langsmith / use workflwos make sure after you finish it is working fine and as it
+   should and keep doing unitill it is done / make sure you update all nessary docs files"
+
+## 2. Approach
+
+Design constraint: **off by default, zero egress unless opted in** — the JSONL turn log
+(`logs/turns.jsonl`) stays the keyless, offline source of truth; LangSmith is an additive
+span viewer, enabled only when `LANGSMITH_TRACING=true` **and** an API key are set.
+
+- Four new `Settings` fields (`LANGSMITH_TRACING/API_KEY/ENDPOINT/PROJECT`);
+  `.env.example` regenerated from the class (the anti-drift mechanism, FR-M1-08).
+- `configure_tracing` (app.py) exports the standard `LANGSMITH_*` environment when opted
+  in — needed because `Settings` reads `.env` without touching `os.environ`, while the
+  langsmith SDK only sees real environment variables. Called once in `build_resources`.
+- `build_openai_clients` passes the one shared `AsyncOpenAI` transport through
+  `langsmith.wrappers.wrap_openai` under the same gate, so chat `create`/`parse` calls
+  appear as LLM spans inside node traces (lazy import: tracing-off runs never load it).
+- `sg.compile(name="memagent")` names the root run (mermaid output verified unchanged).
+- The conftest `settings` fixture pins `LANGSMITH_TRACING=false` so the keyless suite
+  stays zero-egress even when the developer's real `.env` opts in; the new BDD scenarios
+  drive `configure_tracing` against an injected env dict, never real `os.environ`.
+
+## 3. Verified
+
+- 5 new BDD scenarios (off-by-default, flag-without-key stays off, opt-in export,
+  wrap-only-when-fully-opted-in, build_resources activates tracing through the real
+  environment) with `# covers:` declarations; the traceability gate passes at
+  147 functions / 226 scenarios.
+- Mutation-verified: `and → flag-only` in the configure_tracing gate, `and → or` in the
+  clients gate, and deleting the `configure_tracing` call in build_resources each turn
+  exactly one of the new scenarios red.
+- `make test`: 396 keyless tests green, zero warnings; `make lint` clean.
+- Live end-to-end: one miss turn and one hit turn each produced a `memagent` root run in
+  the LangSmith project, verified via the LangSmith API — the miss trace shows the full
+  `guard_input → embed_query → memory_search → web_search → fetch_pages → ingest_content
+  → answer_from_web → log_turn` chain plus router spans and 7 `ChatOpenAI` LLM spans; the
+  hit trace shows the short memory path ending in `answer_from_memory`. `logs/turns.jsonl`
+  recorded both turns unchanged.
+
+## 4. Pre-push adversarial review
+
+A 10-agent workflow (3 review lenses — correctness/egress, test+gate coherence, docs
+truth — then an independent skeptic per finding) confirmed 6 gaps, all fixed before push:
+
+1. The tracing-off pin lived only in the function-scoped `settings` fixture, so
+   shell-exported `LANGSMITH_*` variables could have made non-fixture graph tests upload
+   traces → replaced with an **autouse** fixture pinning/clearing all four variables for
+   every test.
+2. + 3. The AND gate (flag **and** key) was only tested both-on/both-off in both files —
+   an `and → or` regression would have passed the suite → added the flag-without-key
+   boundary scenario and a half-opt-in build assertion (both mutation-verified).
+4. Nothing exercised the production wiring (`build_resources → configure_tracing →
+   os.environ`) — deleting the call would have silently killed the feature → added a
+   scenario that asserts the real environment after building opted-in resources.
+5. The tracing scenarios could be broken by ambient shell variables → same autouse fix.
+6. `AI_USAGE.md` still said `Settings` has 37 fields; it has 41 → corrected.
+
+## 5. Docs updated
+
+README (new "Optional LangSmith tracing" section with the stated egress trade-off, test
+counts), `docs/BDD.md` (counts, index rows, matrix rows), `.env.example` (regenerated),
+`AI_USAGE.md` (this record's index entry + the `Settings` field-count truth-check).

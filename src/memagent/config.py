@@ -70,3 +70,9 @@ class Settings(BaseSettings):
     guard_max_query_chars: int = 2000
     log_level: str = "INFO"
     turn_log_path: str = "logs/turns.jsonl"
+
+    # --- observability (LangSmith tracing, opt-in; logs/turns.jsonl stays the source of truth) ---
+    langsmith_tracing: bool = False  # true + api key -> one trace per turn (configure_tracing)
+    langsmith_api_key: str = ""  # blank keeps tracing off -> the default posture is zero-egress
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
+    langsmith_project: str = "memory-first-web-agent"

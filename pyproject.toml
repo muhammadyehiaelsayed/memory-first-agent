@@ -6,6 +6,7 @@ requires-python = ">=3.12,<3.14"
 dependencies = [
     "langgraph>=1.2,<2",
     "langchain-text-splitters>=1,<2",
+    "langsmith>=0.9,<1",
     "redis>=6.2,<7",
     "redisvl>=0.22,<0.24",
     "httpx>=0.28",
@@ -46,6 +47,10 @@ testpaths = ["tests"]
 markers = [
     "integration: requires a running redis:8.2 (skipped when unreachable)",
     "e2e: full-lifecycle test against real redis",
+]
+filterwarnings = [
+    # langsmith's own package emits this at import; not actionable from this repo
+    "ignore:langsmith.wrappers._openai_agents is deprecated:DeprecationWarning",
 ]
 
 [tool.ruff]

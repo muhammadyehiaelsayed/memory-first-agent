@@ -78,3 +78,10 @@ Feature: LLM transport and token accounting (src/memagent/llm/clients.py)
       | sk-live |                                    | openai default host |
       | ghp_pat | https://models.github.ai/inference | github models host  |
       |         |                                    | readable systemexit |
+
+  # covers: memagent.llm.clients.build_openai_clients
+  Scenario: The shared transport is wrapped for LangSmith only when tracing is fully opted in
+    Given settings that fully opt in to LangSmith tracing, settings that half opt in and settings that do not
+    When the OpenAI clients are built for each configuration
+    Then the fully-opted-in build passes the shared transport through the LangSmith wrapper exactly once
+    And neither the tracing-off build nor the keyless half-opt-in ever touches the wrapper

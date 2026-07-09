@@ -1,8 +1,8 @@
 # BDD Scenarios — Behavior Coverage for Every Python Function
 
 The agent's behavior is specified as executable Gherkin. **Every module-level
-function and class method in `src/` and `scripts/` (146 functions) has its own
-BDD scenario** (221 scenarios across 45 feature files), each derived from
+function and class method in `src/` and `scripts/` (147 functions) has its own
+BDD scenario** (226 scenarios across 45 feature files), each derived from
 the root feature `tests/bdd/features/00_main_functionality.feature` — the main
 functionality (memory-first answering over the five routes: `memory_hit`,
 `memory_miss_web_search`, `degraded_web`, `blocked`, `failed`).
@@ -45,12 +45,12 @@ of the suite — no separate BDD runner.
 | `analytics_classify.feature` | `src/memagent/analytics/classify.py` | "Log exactly one analytics record for every turn" | 6 | `tests/bdd/test_bdd_analytics.py` |
 | `analytics_report.feature` | `src/memagent/analytics/report.py` | "Log exactly one analytics record for every turn" | 5 | `tests/bdd/test_bdd_analytics.py` |
 | `analytics_turnlog.feature` | `src/memagent/analytics/turnlog.py` | "Log exactly one analytics record for every turn" | 4 | `tests/bdd/test_bdd_analytics.py` |
-| `app.feature` | `src/memagent/app.py` | "Fall back to the web and ingest what was found on a memory miss" | 6 | `tests/bdd/test_bdd_orchestration.py` |
+| `app.feature` | `src/memagent/app.py` | "Fall back to the web and ingest what was found on a memory miss" | 10 | `tests/bdd/test_bdd_orchestration.py` |
 | `cli.feature` | `src/memagent/cli.py` | "Answer from memory when a similar question was seen before" | 24 | `tests/bdd/test_bdd_cli.py` |
 | `config.feature` | `src/memagent/config.py` | "Answer from memory when a similar question was seen before" | 4 | `tests/bdd/test_bdd_contracts.py` |
 | `graph.feature` | `src/memagent/graph.py` | "Block malicious input at the guard before any model call" | 2 | `tests/bdd/test_bdd_orchestration.py` |
 | `interfaces.feature` | `src/memagent/interfaces.py` | "Answer from memory when a similar question was seen before" | 10 | `tests/bdd/test_bdd_contracts.py` |
-| `llm_clients.feature` | `src/memagent/llm/clients.py` | "Answer from memory when a similar question was seen before" | 8 | `tests/bdd/test_bdd_llm_clients.py` |
+| `llm_clients.feature` | `src/memagent/llm/clients.py` | "Answer from memory when a similar question was seen before" | 9 | `tests/bdd/test_bdd_llm_clients.py` |
 | `llm_prompts.feature` | `src/memagent/llm/prompts.py` | "Answer from memory when a similar question was seen before" | 5 | `tests/bdd/test_bdd_llm_prompts.py` |
 | `main_entry.feature` | `src/memagent/__main__.py` | "Answer from memory when a similar question was seen before" | 1 | `tests/bdd/test_bdd_contracts.py` |
 | `memory_chunking.feature` | `src/memagent/memory/chunking.py` | "Fall back to the web and ingest what was found on a memory miss" | 4 | `tests/bdd/test_bdd_memory_support.py` |
@@ -88,7 +88,7 @@ of the suite — no separate BDD runner.
 
 ## Function → scenario traceability matrix
 
-212 coverage declarations for 146 functions.
+217 coverage declarations for 147 functions.
 
 | Function | Scenario | Feature file |
 |---|---|---|
@@ -114,7 +114,11 @@ of the suite — no separate BDD runner.
 | `memagent.app.Agent.answer` | Answering a novel question misses memory, reaches the web and cites its sources | `app.feature` |
 | `memagent.app.Agent.ensure_ready` | The agent provisions its memory index once at startup and is idempotent | `app.feature` |
 | `memagent.app.build_resources` | Building resources assembles the real clients without a live connection | `app.feature` |
+| `memagent.app.build_resources` | Building resources activates opt-in tracing through the real environment | `app.feature` |
 | `memagent.app.configure_logging` | Operational logging is wired to stderr so stdout stays pipe-clean | `app.feature` |
+| `memagent.app.configure_tracing` | Tracing is off by default so no telemetry leaves the machine | `app.feature` |
+| `memagent.app.configure_tracing` | Setting the tracing flag without an API key still keeps tracing off | `app.feature` |
+| `memagent.app.configure_tracing` | Opting in to LangSmith exports the tracing environment for the graph run | `app.feature` |
 | `memagent.app.new_turn_state` | A fresh turn starts allowed, thresholded from settings and unrouted until proven | `app.feature` |
 | `memagent.cli._advance_status` | The live status names the step that runs next as each node finishes | `cli.feature` |
 | `memagent.cli._ask` | A single question is answered through the agent facade | `cli.feature` |
@@ -163,6 +167,7 @@ of the suite — no separate BDD runner.
 | `memagent.llm.clients.OpenAIEmbedder.embed` | Embedding vectors are returned in the SDK's index order | `llm_clients.feature` |
 | `memagent.llm.clients.build_openai_clients` | Building the client trio shares one transport with retries disabled | `llm_clients.feature` |
 | `memagent.llm.clients.build_openai_clients` | The shared transport honours the base URL and fails fast without a key | `llm_clients.feature` |
+| `memagent.llm.clients.build_openai_clients` | The shared transport is wrapped for LangSmith only when tracing is fully opted in | `llm_clients.feature` |
 | `memagent.llm.prompts._escape_breakout` | A closing-tag breakout attempt inside content cannot terminate the wrapper | `llm_prompts.feature` |
 | `memagent.llm.prompts._iso_now` | A freshly fetched web source is stamped with the current UTC fetch time | `llm_prompts.feature` |
 | `memagent.llm.prompts.build_system_prompt` | The system prompt frames retrieved context as data and mandates source citations | `llm_prompts.feature` |

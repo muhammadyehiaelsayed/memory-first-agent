@@ -3,8 +3,9 @@
 Binds three features that make the memory-first pipeline hang together:
 - features/routers.feature      — the five pure sync routers (state -> next-node key)
 - features/graph.feature        — build_graph, inspected via its compiled mermaid diagram
-- features/app.feature          — configure_logging / new_turn_state / build_resources /
-                                  Agent.__init__ (all keyless) and Agent.answer (live).
+- features/app.feature          — configure_logging / configure_tracing / new_turn_state /
+                                  build_resources / Agent.__init__ (all keyless) and
+                                  Agent.answer (live).
 
 Keyless techniques:
 - The routers are pure functions of a plain dict: they are called directly, no I/O.
@@ -12,6 +13,8 @@ Keyless techniques:
   so its structure is observable without any live backend (mirrors scripts/render_graph.py).
 - configure_logging is asserted by inspecting the resulting structlog config (its logger
   factory targets stderr, not stdout, so operational logs never pollute the piped answer).
+- configure_tracing is driven against an injected env dict (its test seam), so the real
+  os.environ is never mutated and no LangSmith upload can start from the keyless suite.
 - build_resources runs with OPENAI/TAVILY keys faked by the conftest `settings` fixture; the
   OpenAI/httpx/redis clients construct without any network round-trip.
 - Agent.answer runs the REAL graph over REAL Redis (redis is up; skip-not-fail if it is not)
@@ -21,6 +24,7 @@ Keyless techniques:
 """
 
 import asyncio
+import os
 import pathlib
 import sys
 
@@ -30,7 +34,13 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 import redis.asyncio as aioredis
 
-from memagent.app import Agent, build_resources, configure_logging, new_turn_state
+from memagent.app import (
+    Agent,
+    build_resources,
+    configure_logging,
+    configure_tracing,
+    new_turn_state,
+)
 from memagent.config import Settings
 from memagent.graph import build_graph
 from memagent.memory.schema import get_index, wipe_index
@@ -250,6 +260,91 @@ def _factory_stderr(log_cfg):
 @then("the log stream is rendered for the console")
 def _console_render(log_cfg):
     assert any(isinstance(p, structlog.dev.ConsoleRenderer) for p in log_cfg["processors"])
+
+
+# =========================================================================== #
+# app.feature — configure_tracing                                             #
+# =========================================================================== #
+@given("tracing is configured from settings that never opted in", target_fixture="tracing_ctx")
+def _tracing_default():
+    env: dict[str, str] = {}  # the injection seam: no real os.environ mutation, no leak
+    enabled = configure_tracing(Settings(_env_file=None, openai_api_key="sk-test"), env=env)
+    return {"enabled": enabled, "env": env}
+
+
+@given(
+    "tracing is configured with the flag set but no API key",
+    target_fixture="tracing_ctx",
+)
+def _tracing_no_key():
+    env: dict[str, str] = {}
+    # the AND gate's documented boundary: flag set, key blank -> tracing must stay off
+    half = Settings(_env_file=None, openai_api_key="sk-test", langsmith_tracing=True)
+    return {"enabled": configure_tracing(half, env=env), "env": env}
+
+
+@given(
+    "tracing is configured with LangSmith enabled and an API key",
+    target_fixture="tracing_ctx",
+)
+def _tracing_opted_in():
+    env: dict[str, str] = {}
+    opted_in = Settings(
+        _env_file=None,
+        openai_api_key="sk-test",
+        langsmith_tracing=True,
+        langsmith_api_key="ls-test",
+        langsmith_project="proj-x",
+    )
+    return {"enabled": configure_tracing(opted_in, env=env), "env": env}
+
+
+@then("tracing reports disabled and exports no LANGSMITH variables")
+def _tracing_stays_off(tracing_ctx):
+    assert tracing_ctx["enabled"] is False
+    assert tracing_ctx["env"] == {}
+
+
+@then("tracing reports enabled and exports the four LANGSMITH variables")
+def _tracing_exports(tracing_ctx):
+    assert tracing_ctx["enabled"] is True
+    assert tracing_ctx["env"] == {
+        "LANGSMITH_TRACING": "true",
+        "LANGSMITH_API_KEY": "ls-test",
+        "LANGSMITH_ENDPOINT": "https://api.smith.langchain.com",
+        "LANGSMITH_PROJECT": "proj-x",
+    }
+
+
+@given(
+    "resources are built from settings that opt in to LangSmith tracing",
+    target_fixture="traced_env",
+)
+def _resources_opted_in(monkeypatch):
+    # register an undo for every var the production path writes into the REAL os.environ
+    for var in (
+        "LANGSMITH_TRACING",
+        "LANGSMITH_API_KEY",
+        "LANGSMITH_ENDPOINT",
+        "LANGSMITH_PROJECT",
+    ):
+        monkeypatch.setenv(var, "pre")
+        monkeypatch.delenv(var)
+    opted_in = Settings(
+        _env_file=None,
+        openai_api_key="sk-test",
+        langsmith_tracing=True,
+        langsmith_api_key="ls-test",
+    )
+    build_resources(opted_in)  # the wiring under test: it must export for real, not to a seam
+    return dict(os.environ)
+
+
+@then("the process environment carries the LangSmith opt-in for the graph run")
+def _env_carries_opt_in(traced_env):
+    assert traced_env["LANGSMITH_TRACING"] == "true"
+    assert traced_env["LANGSMITH_API_KEY"] == "ls-test"
+    assert traced_env["LANGSMITH_ENDPOINT"] == "https://api.smith.langchain.com"
 
 
 # =========================================================================== #

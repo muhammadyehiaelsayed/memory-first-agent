@@ -29,9 +29,9 @@ CLI subcommand — the Make target name differs from the CLI command name), `mak
 **Zero-key path** (matches CI, no API keys / no internet): `make test` (also needs no Redis) and
 `uv run python scripts/eval_lifecycle.py --mock` (needs a local `redis:8.2` — `make redis-up`).
 
-`make test` runs 391 keyless tests (399 total with the redis-backed integration/e2e set): unit
-tests plus a 221-scenario BDD layer (pytest-bdd) with one feature file per module. Every one of
-the 146 module-level functions and class methods carries a `# covers:` declaration, enforced bidirectionally by a
+`make test` runs 396 keyless tests (404 total with the redis-backed integration/e2e set): unit
+tests plus a 226-scenario BDD layer (pytest-bdd) with one feature file per module. Every one of
+the 147 module-level functions and class methods carries a `# covers:` declaration, enforced bidirectionally by a
 traceability gate — index and matrix in [`docs/BDD.md`](docs/BDD.md).
 
 **No uv?** `pip install -e ".[dev]"` inside a Python 3.12 venv works as a fallback
@@ -110,6 +110,26 @@ duckdb -c "SELECT route, count(*) FROM read_json_auto('logs/turns.jsonl') GROUP 
 ```
 
 JSONL stays the single source of truth — there is no Redis mirror of turn records.
+
+### Optional LangSmith tracing
+
+Tracing is **off by default**, so the default posture stays zero-egress. Opting in mirrors
+every turn to [LangSmith](https://smith.langchain.com) as one `memagent` trace: a child span
+per graph node (`guard_input → embed_query → memory_search → …`), every router decision, and
+the individual LLM calls (the shared OpenAI transport is wrapped only when tracing is on).
+Enable it in `.env`:
+
+```
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_...
+LANGSMITH_PROJECT=memory-first-web-agent   # optional — this is the default
+```
+
+`logs/turns.jsonl` remains the source of truth either way (keyless, offline,
+DuckDB-queryable); LangSmith adds an interactive span viewer on top. Trade-off, stated
+plainly: with tracing on, turn inputs and outputs (queries, fetched page content) are
+uploaded to LangSmith's cloud — leave it off to keep everything on-machine. The keyless
+test suite pins `LANGSMITH_TRACING=false`, so `make test` and CI never upload a trace.
 
 ## Security & reliability
 
