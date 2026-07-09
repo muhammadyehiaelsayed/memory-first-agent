@@ -35,3 +35,10 @@ Feature: Turn record schema and JSONL writer (src/memagent/analytics/turnlog.py)
     Given a web-search turn state carrying answer tokens and two per-page summary usages
     When the turn record is built
     Then the record carries a summary_llm bucket summing both pages' tokens
+
+  # covers: memagent.analytics.turnlog.cost_usd, memagent.analytics.turnlog.build_turn_record
+  Scenario: Every turn record prices its token usage in USD
+    Given a web-search turn state carrying answer tokens and two per-page summary usages
+    When the turn record is built
+    Then the record's cost equals the documented per-million prices applied to its buckets
+    And a turn with no token usage costs exactly zero

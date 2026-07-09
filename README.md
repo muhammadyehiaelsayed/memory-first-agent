@@ -29,9 +29,9 @@ CLI subcommand — the Make target name differs from the CLI command name), `mak
 **Zero-key path** (matches CI, no API keys / no internet): `make test` (also needs no Redis) and
 `uv run python scripts/eval_lifecycle.py --mock` (needs a local `redis:8.2` — `make redis-up`).
 
-`make test` runs 396 keyless tests (404 total with the redis-backed integration/e2e set): unit
-tests plus a 226-scenario BDD layer (pytest-bdd) with one feature file per module. Every one of
-the 147 module-level functions and class methods carries a `# covers:` declaration, enforced bidirectionally by a
+`make test` runs 397 keyless tests (405 total with the redis-backed integration/e2e set): unit
+tests plus a 227-scenario BDD layer (pytest-bdd) with one feature file per module. Every one of
+the 148 module-level functions and class methods carries a `# covers:` declaration, enforced bidirectionally by a
 traceability gate — index and matrix in [`docs/BDD.md`](docs/BDD.md).
 
 **No uv?** `pip install -e ".[dev]"` inside a Python 3.12 venv works as a fallback
@@ -98,10 +98,13 @@ graph TD;
 ## Turn log & analytics
 
 Every turn appends one JSON record to `logs/turns.jsonl` (route, similarity, sources,
-latencies, token usage, query classification). `memagent analytics` renders hit-rate and
-topic/question-type tables over it (`--json` for machines); `logs/turns.sample.jsonl`
-ships as a record-format reference — on a fresh clone `analytics` reports no turns until you
-run `ask`/`chat`.
+latencies, token usage, a whole-turn `cost_usd` priced from the documented per-model table,
+query classification). `memagent analytics` renders hit-rate, topic/question-type, and
+token-cost tables over it (`--json` for machines); `logs/turns.sample.jsonl` ships as a
+record-format reference — on a fresh clone `analytics` reports no turns until you run
+`ask`/`chat`. Cost covers the tracked LLM surfaces (answer / classifier / summaries);
+unpriced models — including the $0 GitHub Models dev aliases — honestly report `0` rather
+than a guess.
 
 The turn log is directly DuckDB-queryable:
 
@@ -124,6 +127,10 @@ LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=lsv2_...
 LANGSMITH_PROJECT=memory-first-web-agent   # optional — this is the default
 ```
+
+The same per-turn `cost_usd` written to the JSONL record also lands on the trace — on the
+`log_turn` span's outputs and the root run's final state — so the cost story reads
+identically in both sinks.
 
 `logs/turns.jsonl` remains the source of truth either way (keyless, offline,
 DuckDB-queryable); LangSmith adds an interactive span viewer on top. Trade-off, stated

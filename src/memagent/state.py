@@ -89,6 +89,7 @@ class AgentState(TypedDict):
     latency_ms: Annotated[dict[str, int], _merge_dicts]
     analytics: QueryClassification | None
     tokens: Annotated[dict, _merge_dicts]  # per-model usage for the turn log
+    cost_usd: float | None  # whole-turn USD cost priced from tokens (written by log_turn)
     # --- turn-bookkeeping channels (single-writer; specs/002 research D2) ---
     turn_started_at: float | None  # perf_counter() at turn start; feeds latency_ms.total (M4)
     search_provider: str | None  # "tavily" | "ddgs" | None; written by M3's web_search

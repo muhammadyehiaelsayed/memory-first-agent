@@ -1,8 +1,8 @@
 # BDD Scenarios — Behavior Coverage for Every Python Function
 
 The agent's behavior is specified as executable Gherkin. **Every module-level
-function and class method in `src/` and `scripts/` (147 functions) has its own
-BDD scenario** (226 scenarios across 45 feature files), each derived from
+function and class method in `src/` and `scripts/` (148 functions) has its own
+BDD scenario** (227 scenarios across 45 feature files), each derived from
 the root feature `tests/bdd/features/00_main_functionality.feature` — the main
 functionality (memory-first answering over the five routes: `memory_hit`,
 `memory_miss_web_search`, `degraded_web`, `blocked`, `failed`).
@@ -44,7 +44,7 @@ of the suite — no separate BDD runner.
 | `99_traceability.feature` | `—` | — | 1 | `tests/bdd/test_bdd_traceability.py` |
 | `analytics_classify.feature` | `src/memagent/analytics/classify.py` | "Log exactly one analytics record for every turn" | 6 | `tests/bdd/test_bdd_analytics.py` |
 | `analytics_report.feature` | `src/memagent/analytics/report.py` | "Log exactly one analytics record for every turn" | 5 | `tests/bdd/test_bdd_analytics.py` |
-| `analytics_turnlog.feature` | `src/memagent/analytics/turnlog.py` | "Log exactly one analytics record for every turn" | 4 | `tests/bdd/test_bdd_analytics.py` |
+| `analytics_turnlog.feature` | `src/memagent/analytics/turnlog.py` | "Log exactly one analytics record for every turn" | 5 | `tests/bdd/test_bdd_analytics.py` |
 | `app.feature` | `src/memagent/app.py` | "Fall back to the web and ingest what was found on a memory miss" | 10 | `tests/bdd/test_bdd_orchestration.py` |
 | `cli.feature` | `src/memagent/cli.py` | "Answer from memory when a similar question was seen before" | 24 | `tests/bdd/test_bdd_cli.py` |
 | `config.feature` | `src/memagent/config.py` | "Answer from memory when a similar question was seen before" | 4 | `tests/bdd/test_bdd_contracts.py` |
@@ -88,7 +88,7 @@ of the suite — no separate BDD runner.
 
 ## Function → scenario traceability matrix
 
-217 coverage declarations for 147 functions.
+219 coverage declarations for 148 functions.
 
 | Function | Scenario | Feature file |
 |---|---|---|
@@ -110,6 +110,8 @@ of the suite — no separate BDD runner.
 | `memagent.analytics.turnlog.build_turn_record` | A memory-hit record carries every schema field and no web block | `analytics_turnlog.feature` |
 | `memagent.analytics.turnlog.build_turn_record` | A web-route record reports provider, results, fetched pages, and only persisted chunks | `analytics_turnlog.feature` |
 | `memagent.analytics.turnlog.build_turn_record` | Per-page summary tokens are folded into a summary_llm bucket | `analytics_turnlog.feature` |
+| `memagent.analytics.turnlog.build_turn_record` | Every turn record prices its token usage in USD | `analytics_turnlog.feature` |
+| `memagent.analytics.turnlog.cost_usd` | Every turn record prices its token usage in USD | `analytics_turnlog.feature` |
 | `memagent.app.Agent.__init__` | Constructing the agent compiles the graph once and mints a session id | `app.feature` |
 | `memagent.app.Agent.answer` | Answering a novel question misses memory, reaches the web and cites its sources | `app.feature` |
 | `memagent.app.Agent.ensure_ready` | The agent provisions its memory index once at startup and is idempotent | `app.feature` |

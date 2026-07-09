@@ -129,8 +129,9 @@ chronological log of every instruction:
   LangSmith tracing layered over the JSONL turn log: `configure_tracing` env export,
   `wrap_openai` on the shared transport, a named root run; off by default so the keyless
   suite and CI stay zero-egress; live-verified miss and hit traces via the LangSmith API;
-  an adversarial pre-push review found 6 gaps — all fixed and mutation-verified;
-  404 tests, traceability gate at 147 functions)
+  an adversarial pre-push review found 6 gaps — all fixed and mutation-verified; then
+  per-turn `cost_usd` added to the turn record, the graph state, and the trace outputs
+  from one shared pricing site; 405 tests, traceability gate at 148 functions)
 
 ## 6. What was reviewed, tested, and corrected by hand
 
