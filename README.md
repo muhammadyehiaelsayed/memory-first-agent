@@ -26,12 +26,20 @@ Other targets: `make ask Q="..."`, `make analytics`, `make wipe` (runs the `wipe
 CLI subcommand — the Make target name differs from the CLI command name), `make test`,
 `make test-integration`, `make lint`, `make demo`.
 
+Inside `chat`, a live status line narrates each step and the decision it took (checking
+memory → found it, or off to the web to read N pages), then the hit/miss banner and answer.
+Type `/help` for the commands, `/clear` to forget the current conversation, and `exit` /
+`quit` / Ctrl-D to leave; Ctrl-C while it is answering cancels that turn and drops you back
+to the prompt (a real SIGINT arrives as an `asyncio.CancelledError` under the async runner,
+so both are caught). All of this chrome is written to stderr on a real terminal only, so
+`chat`'s stdout stays pipe-clean.
+
 **Zero-key path** (matches CI, no API keys / no internet): `make test` (also needs no Redis) and
 `uv run python scripts/eval_lifecycle.py --mock` (needs a local `redis:8.2` — `make redis-up`).
 
-`make test` runs 397 keyless tests (405 total with the redis-backed integration/e2e set): unit
-tests plus a 227-scenario BDD layer (pytest-bdd) with one feature file per module. Every one of
-the 148 module-level functions and class methods carries a `# covers:` declaration, enforced bidirectionally by a
+`make test` runs 400 keyless tests (408 total with the redis-backed integration/e2e set): unit
+tests plus a 230-scenario BDD layer (pytest-bdd) with one feature file per module. Every one of
+the 150 module-level functions and class methods carries a `# covers:` declaration, enforced bidirectionally by a
 traceability gate — index and matrix in [`docs/BDD.md`](docs/BDD.md).
 
 **No uv?** `pip install -e ".[dev]"` inside a Python 3.12 venv works as a fallback

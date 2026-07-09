@@ -132,6 +132,14 @@ chronological log of every instruction:
   an adversarial pre-push review found 6 gaps — all fixed and mutation-verified; then
   per-turn `cost_usd` added to the turn record, the graph state, and the trace outputs
   from one shared pricing site; 405 tests, traceability gate at 148 functions)
+- `docs/ai_prompts/cli-experience.md` — post-delivery chat UX (a design workflow of three
+  divergent proposals synthesized into one spec: a single friendly self-overwriting status
+  line narrating each node + decision, a rounded welcome/`/help` panel, `/clear`, and
+  traceback-free Ctrl-C — all stderr/TTY-only so stdout stays pipe-clean; two new pure
+  helpers `status_label`/`chat_help_text`, and a fixed prompt-to-stdout leak; an adversarial
+  review caught a real Ctrl-C bug — a SIGINT arrives as `asyncio.CancelledError` under the
+  runner, so the handlers were dead code — fixed + guarded by a test; PTY-verified live;
+  408 tests, traceability gate at 150 functions)
 
 ## 6. What was reviewed, tested, and corrected by hand
 
