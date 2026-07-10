@@ -111,3 +111,14 @@ pricing scenario gained one step hand-computing both alias prices; mutations (a 
 price, a deleted alias row) each turn the test red. Because the analytics report prices
 token buckets through the same table, `memagent analytics` retroactively estimates cost for
 previously-logged free-tier turns too (their stored `cost_usd: 0.0` is immutable history).
+
+Follow-up (same day): the user pointed out LangSmith's own per-run cost column still read
+$0 — that column is LangSmith's separate pricing layer, computed at ingest from its model
+price map, whose anchored default patterns (`^gpt-4\.1-mini…$`) cannot match the prefixed
+alias IDs. Fixed without code: two workspace price-map entries were added via the
+`model-price-map` API (match `^openai/gpt-4\.1-mini(-\d{4}-\d{2}-\d{2})?$` at
+$0.40/$1.60 per 1M, and the nano equivalent at $0.10/$0.40). Verified on a live turn: the
+root run's native `total_cost` (0.002656) now equals the app-logged `cost_usd` (0.002656)
+on the same trace, with per-span costs on each LLM call. The price map applies at ingest,
+so earlier traces keep native $0; their outputs still carry the app's `cost_usd`. README's
+LangSmith section documents the price-map step.

@@ -140,7 +140,10 @@ LANGSMITH_PROJECT=memory-first-web-agent   # optional — this is the default
 
 The same per-turn `cost_usd` written to the JSONL record also lands on the trace — on the
 `log_turn` span's outputs and the root run's final state — so the cost story reads
-identically in both sinks.
+identically in both sinks. LangSmith's *own* per-run cost column is a separate layer,
+computed from its model price map; the GitHub Models alias IDs (`openai/gpt-4.1-*`) are
+not in its default catalog, so add workspace price-map entries for them (Settings → Model
+pricing, or the `model-price-map` API) and native run costs match the logged `cost_usd`.
 
 `logs/turns.jsonl` remains the source of truth either way (keyless, offline,
 DuckDB-queryable); LangSmith adds an interactive span viewer on top. Trade-off, stated
