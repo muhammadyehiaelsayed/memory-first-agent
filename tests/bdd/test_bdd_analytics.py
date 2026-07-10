@@ -33,7 +33,7 @@ from memagent.analytics.report import (
     aggregate,
     render_report,
 )
-from memagent.analytics.turnlog import TurnLogger, build_turn_record
+from memagent.analytics.turnlog import TurnLogger, build_turn_record, cost_usd
 from memagent.config import Settings
 from memagent.nodes.log import make_log_turn
 
@@ -352,6 +352,27 @@ def _assert_record_cost(record_ctx):
     # answer: gpt-5.4-mini 2311/402; folded summaries: gpt-5.4-nano 800/150 — hand-computed
     # from the documented table so a price or formula regression fails here, not tautologically.
     assert record_ctx["record"]["cost_usd"] == 0.00389
+
+
+@then("a GitHub Models free-tier turn is priced at its paid list-price equivalent")
+def _assert_alias_cost():
+    # openai/gpt-4.1-mini 1000/500 and openai/gpt-4.1-nano 2000/100 — hand-computed from
+    # the 2026-07-10 list prices (0.40/1.60 and 0.10/0.40 per 1M) so the alias rows are
+    # load-bearing: a wrong or deleted alias price fails here, not tautologically.
+    assert cost_usd("openai/gpt-4.1-mini", 1000, 500) == 0.0012
+    assert cost_usd("openai/gpt-4.1-nano", 2000, 100) == 0.00024
+    # and end to end: a record whose bucket carries the alias model prices the whole turn
+    aliased = _make_state(
+        "memory_hit",
+        tokens={
+            "answer_llm": {
+                "model": "openai/gpt-4.1-mini",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+            }
+        },
+    )
+    assert build_turn_record(aliased, Settings(_env_file=None))["cost_usd"] == 0.0012
 
 
 @then("a turn with no token usage costs exactly zero")

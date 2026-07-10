@@ -18,14 +18,20 @@ from memagent.config import Settings
 # route values whose turns touched the web pipeline -> record a web block
 _WEB_ROUTES = ("memory_miss_web_search", "degraded_web")
 
-# Documented per-1M-token prices (USD), verified against the official OpenAI pricing page
-# (MODEL_CHOICES.md / docs/verification-2026-07-06.md): (input, output). Models absent here
+# Documented per-1M-token prices (USD), verified against official OpenAI pricing/model
+# pages (MODEL_CHOICES.md / docs/verification-2026-07-06.md): (input, output). Models absent here
 # are still token-counted; their cost simply shows as 0 rather than guessing an unknown
-# price — the GitHub Models free-dev aliases (openai/gpt-4.1-*) genuinely cost $0.
+# price. The GitHub Models free-dev aliases (openai/gpt-4.1-*) are deliberately priced at
+# their official OpenAI list prices (model pages, 2026-07-10), so free-tier dev turns log
+# what the same tokens WOULD cost if paid — the actual free-tier charge is $0.
 _MODEL_PRICES_PER_1M = {
     "gpt-5.4-mini": (0.75, 4.50),
     "gpt-5.4-nano": (0.20, 1.25),
     "text-embedding-3-small": (0.02, 0.0),
+    # GitHub Models free-dev aliases -> paid-equivalent estimate (list prices, 2026-07-10)
+    "openai/gpt-4.1-mini": (0.40, 1.60),
+    "openai/gpt-4.1-nano": (0.10, 0.40),
+    "openai/text-embedding-3-small": (0.02, 0.0),
 }
 
 
@@ -79,7 +85,8 @@ def build_turn_record(state: dict, settings: Settings) -> dict:
             "output": sum(u["output_tokens"] for u in summary_usages),
         }
     # Whole-turn USD cost over every recorded bucket (answer/analytics/summary). Unpriced
-    # models contribute 0 (see _MODEL_PRICES_PER_1M), so the field is honest, never guessed.
+    # models contribute 0; the GitHub free-dev aliases are priced at list, so free-tier
+    # turns carry a paid-equivalent estimate (see _MODEL_PRICES_PER_1M).
     turn_cost = round(
         sum(cost_usd(b["model"], b["input"], b["output"]) for b in tokens.values()), 6
     )

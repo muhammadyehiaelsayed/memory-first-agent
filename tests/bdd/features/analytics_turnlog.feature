@@ -41,4 +41,5 @@ Feature: Turn record schema and JSONL writer (src/memagent/analytics/turnlog.py)
     Given a web-search turn state carrying answer tokens and two per-page summary usages
     When the turn record is built
     Then the record's cost equals the documented per-million prices applied to its buckets
+    And a GitHub Models free-tier turn is priced at its paid list-price equivalent
     And a turn with no token usage costs exactly zero

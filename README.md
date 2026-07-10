@@ -111,9 +111,10 @@ latencies, token usage, a whole-turn `cost_usd` priced from the documented per-m
 query classification). `memagent analytics` renders hit-rate, topic/question-type, and
 token-cost tables over it (`--json` for machines); `logs/turns.sample.jsonl` ships as a
 record-format reference — on a fresh clone `analytics` reports no turns until you run
-`ask`/`chat`. Cost covers the tracked LLM surfaces (answer / classifier / summaries);
-unpriced models — including the $0 GitHub Models dev aliases — honestly report `0` rather
-than a guess.
+`ask`/`chat`. Cost covers the tracked LLM surfaces (answer / classifier / summaries). The
+GitHub Models free-dev aliases are priced at their official OpenAI list prices, so free-tier
+turns log what the same tokens would cost if paid (the actual free-tier charge is $0);
+models absent from the price table report `0` rather than a guess.
 
 The turn log is directly DuckDB-queryable:
 
