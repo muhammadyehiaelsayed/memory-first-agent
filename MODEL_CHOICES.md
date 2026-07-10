@@ -14,6 +14,10 @@
   gpt-5.4-nano **$0.20 / $1.25**, gpt-5.4 flagship **$2.50 / $15.00** — all unchanged.
   text-embedding-3-small is not listed on the main pricing page; its **$0.02**/1M stands
   on the 2026-07-04 verification.
+- **GitHub Models free-dev aliases priced (2026-07-10)**: `openai/gpt-4.1-mini`
+  **$0.40 / $1.60** and `openai/gpt-4.1-nano` **$0.10 / $0.40** (official model pages) are
+  in the turn-log price table, so free-tier dev turns carry a paid-equivalent `cost_usd`
+  estimate instead of 0 — the actual free-tier charge is $0.
 - **`temperature=0` on the pinned `gpt-5.4-mini`**: ⏳ PENDING — requires a real
   `OPENAI_API_KEY`; the one-off probe (`chat.completions.create(model="gpt-5.4-mini",
   temperature=0, max_tokens=8)`, expect HTTP 200) runs the moment the key is available

@@ -80,8 +80,9 @@ counts), `docs/BDD.md` (counts, index rows, matrix rows), `.env.example` (regene
 Per-turn USD cost added to both sinks from ONE pricing site: `_MODEL_PRICES_PER_1M` and
 `cost_usd()` moved to `analytics/turnlog.py` (the record-schema owner); the aggregate in
 `report.py` now imports it, so per-turn and aggregate cost cannot drift. Every turn record
-gains a top-level `cost_usd` (after `tokens`; unpriced models — including the $0 GitHub
-Models dev aliases — contribute 0, never a guess). `log_turn` writes the same figure into
+gains a top-level `cost_usd` (after `tokens`; unpriced models — including, at the time,
+the $0 GitHub Models dev aliases — contribute 0, never a guess; §7 later priced the
+free-dev aliases as a paid-equivalent estimate). `log_turn` writes the same figure into
 graph state (new `cost_usd` state channel, initialised in `new_turn_state`), so an opt-in
 LangSmith trace shows it on the `log_turn` span outputs and the root run's final state —
 verified live against the LangSmith API and the JSONL record of the same turn.
@@ -89,3 +90,24 @@ verified live against the LangSmith API and the JSONL record of the same turn.
 others; mutations (a wrong table price, dropping the record field, dropping the
 state write) each turn tests red. 397 keyless / 405 total; gate 148 functions /
 227 scenarios.
+
+## 7. Follow-up instruction (2026-07-10, verbatim)
+
+1. "one more thing when you log the cost local and in langsmith it is always 0 becasue i
+   use free models from github but i want for now becasue i use git hub i need an
+   estimation to actual cost based on in and out tokens if i use this models and pay for
+   it use workflows and make sure the change is minimal and make sure it works after you
+   finish"
+
+Minimal change (one file of code): the GitHub Models free-dev aliases
+(`openai/gpt-4.1-mini` $0.40/$1.60, `openai/gpt-4.1-nano` $0.10/$0.40 per 1M — verified on
+the official OpenAI model pages 2026-07-10) were added to `_MODEL_PRICES_PER_1M`, so
+free-tier dev turns now log what the same in/out tokens would cost if paid — in the JSONL
+record, the graph state, and the LangSmith trace, all through the existing single pricing
+site (zero changes to `cost_usd`, `build_turn_record`, `log_turn`, or the report). The
+"unpriced models report 0" behaviour is unchanged for genuinely unknown models; README,
+MODEL_CHOICES, and the table comments now state the estimate explicitly. The existing
+pricing scenario gained one step hand-computing both alias prices; mutations (a wrong alias
+price, a deleted alias row) each turn the test red. Because the analytics report prices
+token buckets through the same table, `memagent analytics` retroactively estimates cost for
+previously-logged free-tier turns too (their stored `cost_usd: 0.0` is immutable history).

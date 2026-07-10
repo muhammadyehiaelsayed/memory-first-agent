@@ -131,7 +131,9 @@ chronological log of every instruction:
   suite and CI stay zero-egress; live-verified miss and hit traces via the LangSmith API;
   an adversarial pre-push review found 6 gaps — all fixed and mutation-verified; then
   per-turn `cost_usd` added to the turn record, the graph state, and the trace outputs
-  from one shared pricing site; 405 tests, traceability gate at 148 functions)
+  from one shared pricing site; 405 tests, traceability gate at 148 functions; finally
+  (2026-07-10) the GitHub Models free-dev aliases priced at official OpenAI list prices so
+  free-tier turns log a paid-equivalent estimate instead of 0)
 - `docs/ai_prompts/cli-experience.md` — post-delivery chat UX (a design workflow of three
   divergent proposals synthesized into one spec: a single friendly self-overwriting status
   line narrating each node + decision, a rounded welcome/`/help` panel, `/clear`, and
