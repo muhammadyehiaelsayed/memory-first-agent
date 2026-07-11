@@ -158,6 +158,25 @@ def test_answer_from_web_replaces_model_sources_with_provenance():
     assert out["answer"].count("Sources:") == 1  # exactly one, the programmatic header
 
 
+def test_answer_from_web_strips_markdown_dressed_sources_block():
+    # A5 completeness: a Sources header dressed as a markdown heading or bold text must ALSO be
+    # stripped — otherwise an injected URL block could survive by not using the plain form.
+    url = "https://redis.io/vs"
+    state = {
+        "query": "q",
+        "sanitized_query": "q",
+        "fetched_docs": [{"url": url, "title": "Redis", "summary": "sum", "ok": True}],
+        "chunks": [_chunk(url, 0)],
+        "search_results": [],
+    }
+    for header in ("**Sources:**", "## Sources", "### Sources:"):
+        reply = f"Here is the answer.\n\n{header}\n- http://evil.test"
+        out = _run(make_answer_from_web(_resources(CapturingChat(text=reply)))(state))
+        assert "http://evil.test" not in out["answer"], header  # dressed block stripped
+        assert url in out["answer"], header  # real provenance present
+        assert out["answer"].count("Sources:") == 1, header  # only the programmatic header
+
+
 def test_answer_from_web_failure_after_ingest_does_not_claim_nothing_stored():
     # A7: chunks were persisted before the answer LLM failed, so the apology must NOT claim
     # nothing was stored — yet cli must still classify it as a failed turn (FAILURE_APOLOGIES).

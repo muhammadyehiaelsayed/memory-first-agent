@@ -80,7 +80,12 @@ def make_answer_from_memory(resources: AgentResources):
         # A5: drop any model-emitted trailing "Sources:" block (it may carry invented or
         # injection-induced URLs) and ALWAYS append the programmatic listing built from the
         # real hits, so displayed citations always equal the structured provenance set.
-        answer = re.split(r"(?im)^\s*sources\s*:.*$", answer, maxsplit=1)[0].rstrip()
+        # match the citation header in any form the model might emit — plain "Sources:", an
+        # ATX heading ("## Sources"), or bold ("**Sources:**") — so an invented/injected URL
+        # block cannot survive by dressing its header in markdown.
+        answer = re.split(r"(?im)^\s{0,3}#{0,6}\s*\*{0,2}\s*sources\s*:?.*$", answer, maxsplit=1)[
+            0
+        ].rstrip()
         listing = "\n".join(f"- {s['url']}" for s in sources)
         answer = f"{answer}\n\nSources:\n{listing}"
         return {
@@ -177,7 +182,12 @@ def make_answer_from_web(resources: AgentResources):
         answer = strip_markdown_images(result.text)  # T4 output defence (FR-M5-29)
         # A5: drop any model-emitted trailing "Sources:" block and ALWAYS append the
         # programmatic listing, so displayed citations always equal the provenance set.
-        answer = re.split(r"(?im)^\s*sources\s*:.*$", answer, maxsplit=1)[0].rstrip()
+        # match the citation header in any form the model might emit — plain "Sources:", an
+        # ATX heading ("## Sources"), or bold ("**Sources:**") — so an invented/injected URL
+        # block cannot survive by dressing its header in markdown.
+        answer = re.split(r"(?im)^\s{0,3}#{0,6}\s*\*{0,2}\s*sources\s*:?.*$", answer, maxsplit=1)[
+            0
+        ].rstrip()
         listing = "\n".join(f"- {s['url']}" for s in sources)
         answer = f"{answer}\n\nSources:\n{listing}"
         if disclaimer:
