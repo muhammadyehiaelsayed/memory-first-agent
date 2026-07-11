@@ -18,6 +18,7 @@ import redis.asyncio as aioredis
 from pytest_bdd import given, parsers, scenarios, then, when
 from redisvl.index import AsyncSearchIndex
 
+from memagent.config import Settings
 from memagent.memory.chunking import chunk_markdown
 from memagent.memory.schema import (
     assert_index_dims,
@@ -37,8 +38,10 @@ scenarios("features/memory_chunking.feature")
 # memory_schema.feature — build_schema
 # ---------------------------------------------------------------------------
 @when("the web_memory schema is built from settings", target_fixture="schema_dict")
-def build_the_schema(settings):
-    return build_schema(settings).to_dict()
+def build_the_schema():
+    # pins the DEFAULT shipped schema (name "web_memory", prefix "chunk") — uses a fresh
+    # default Settings, not the isolated test fixture that overrides those for demo safety
+    return build_schema(Settings(_env_file=None)).to_dict()
 
 
 @then(parsers.parse("it declares exactly {n:d} fields named {names}"))
@@ -76,8 +79,10 @@ def a_redis_client(settings):
 
 
 @when("an index is built from the schema and that client", target_fixture="built_index")
-def build_index_over_client(settings, redis_client):
-    return get_index(settings, redis_client)
+def build_index_over_client(redis_client):
+    # default schema (named "web_memory") over the lazy client — a construction-only check,
+    # so it pins the shipped name rather than the isolated test fixture's
+    return get_index(Settings(_env_file=None), redis_client)
 
 
 @then("the result is an AsyncSearchIndex bound to that client")
@@ -143,28 +148,27 @@ def index_exists_after(ensure_result):
 # ---------------------------------------------------------------------------
 # memory_schema.feature — wipe_index (live redis)
 # ---------------------------------------------------------------------------
-_STALE_META_KEY = "doc:bddstalehash"
-
-
 @given(
     "a running Redis with the web_memory index and a stale doc: meta hash",
     target_fixture="wipe_setup",
 )
 def redis_with_stale_doc(redis_url, settings):
+    # under the isolated meta prefix ("doc_test:") so both the write and the wipe stay off the
+    # demo's "doc:*" namespace — never pollutes or purges real demo memory
+    stale_key = f"{settings.memory_meta_prefix}:bddstalehash"
+
     async def _setup():
         client = aioredis.from_url(settings.redis_url)
         try:
             index = get_index(settings, client)
             await ensure_index(index)
-            await client.hset(
-                _STALE_META_KEY, mapping={"url": "https://redis.io/x", "fetched_at": "1"}
-            )
-            return await client.exists(_STALE_META_KEY)
+            await client.hset(stale_key, mapping={"url": "https://redis.io/x", "fetched_at": "1"})
+            return await client.exists(stale_key)
         finally:
             await client.aclose()
 
     assert asyncio.run(_setup()) == 1  # the stale meta hash is really present before the wipe
-    return {"key": _STALE_META_KEY}
+    return {"key": stale_key}
 
 
 @when("wipe_index runs", target_fixture="wipe_result")
@@ -173,7 +177,7 @@ def run_wipe(settings, wipe_setup):
         client = aioredis.from_url(settings.redis_url)
         try:
             index = get_index(settings, client)
-            await wipe_index(index)
+            await wipe_index(index, settings)
             after = await client.exists(wipe_setup["key"])
             exists = await index.exists()
             return {"after": after, "exists": exists}

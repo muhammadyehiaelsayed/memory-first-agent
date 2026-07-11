@@ -111,9 +111,13 @@ def build_openai_clients(settings: Settings) -> tuple[OpenAIChatLLM, OpenAIChatL
         temperature=0.0,
         retrying=retrying,
     )
-    # Analytics client is deliberately NOT wrapped (D3): classify.py owns its own
-    # wait_for(8s) + stop_after_attempt(2); wrapping here would nest 2×4 retries and
-    # break the M4 exactly-2-calls tests. Its failure already degrades to analytics=null.
+    # Analytics client is deliberately NOT wrapped globally (D3). Both of its consumers own a
+    # LOCAL wait_for + stop_after_attempt(2) at their own call-site instead:
+    #   - analytics/classify.py: wait_for(classify_timeout_s) — failure degrades to analytics=null;
+    #   - nodes/ingest.py page summary: wait_for(classify_timeout_s) — failure degrades to
+    #     chunking-without-summary.
+    # A global wrap here would nest 2×4 retries and break the M4 exactly-2-calls tests, so each
+    # consumer keeps its own bounded policy.
     analytics = OpenAIChatLLM(
         client, settings.analytics_model, ANALYTICS_MAX_TOKENS, temperature=0.0
     )

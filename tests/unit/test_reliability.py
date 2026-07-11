@@ -182,12 +182,15 @@ class FakeFetcher:
 
 
 class FakeMemory:
-    def __init__(self, hits=None, down=False):
+    def __init__(self, hits=None, down=False, ensure_down=False):
         self.hits = hits or []
         self.down = down
+        self.ensure_down = ensure_down
         self.store_calls = 0
 
     async def ensure_ready(self):
+        if self.ensure_down:  # startup Redis outage, before the graph runs (H3)
+            raise MemoryUnavailableError("redis down at startup")
         return None
 
     async def knn(self, vector, k):
@@ -247,6 +250,18 @@ HIT = [
 def test_redis_down_degrades_to_web_only():
     res = resources(memory=FakeMemory(down=True))
     result = run(res)
+    assert result.route == "degraded_web"
+    assert result.degradation == "redis_down"
+    assert res.memory.store_calls == 0
+    assert len(res.turn_logger.records) == 1
+
+
+def test_startup_redis_outage_degrades_to_web_not_traceback():
+    # H3: ensure_ready fails PRE-graph on a startup outage; test_redis_down_degrades_to_web_only
+    # only fails knn() AFTER readiness. The turn must NOT raise to the caller and MUST still run
+    # web-only and write exactly one record (no persistence attempted).
+    res = resources(memory=FakeMemory(down=True, ensure_down=True))
+    result = run(res)  # must not raise
     assert result.route == "degraded_web"
     assert result.degradation == "redis_down"
     assert res.memory.store_calls == 0

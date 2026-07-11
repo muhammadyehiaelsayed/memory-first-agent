@@ -69,3 +69,57 @@ def test_persistent_503_exhausts_and_raises_typed():
 def test_tavily_holds_httpx_client():  # regression guard: never swap in tavily-python
     searcher = TavilySearcher(SETTINGS)
     assert isinstance(searcher._client, httpx.AsyncClient)
+
+
+# --- A9: the keyless ddgs leg also owns an agent-side deadline + bounded retry ----------
+
+
+def test_ddgs_retries_transient_failure_then_succeeds(monkeypatch):
+    # A single transient ddgs blip is retried within the bounded budget, not fatal.
+    calls = {"n": 0}
+
+    class FlakyDDGS:
+        def text(self, query, max_results):
+            calls["n"] += 1
+            if calls["n"] < 2:
+                raise RuntimeError("transient ddgs blip")
+            return [{"href": "https://d.test/1", "title": "D", "body": "b"}]
+
+    monkeypatch.setattr("memagent.web.search.DDGS", FlakyDDGS)
+    results = _run(DdgsSearcher(SETTINGS).search("redis", 2))
+    assert calls["n"] == 2  # retried once after the transient failure
+    assert results[0]["url"] == "https://d.test/1"
+
+
+def test_ddgs_persistent_failure_degrades_to_search_unavailable(monkeypatch):
+    # Persistent ddgs failure exhausts the bounded budget and degrades to the typed error.
+    calls = {"n": 0}
+
+    class DeadDDGS:
+        def text(self, query, max_results):
+            calls["n"] += 1
+            raise RuntimeError("ddgs down")
+
+    monkeypatch.setattr("memagent.web.search.DDGS", DeadDDGS)
+    raised = False
+    try:
+        _run(DdgsSearcher(SETTINGS).search("redis", 2))
+    except SearchUnavailableError:
+        raised = True
+    assert raised
+    assert calls["n"] == 2  # bounded: exactly 2 attempts, then typed degradation
+
+
+def test_ddgs_deadline_fires_and_degrades(monkeypatch):
+    # An agent-owned deadline (asyncio.wait_for) bounds a hanging ddgs call and degrades typed.
+    async def hang(_fn):
+        await asyncio.sleep(3600)  # never completes within the deadline; cancellable
+
+    monkeypatch.setattr(asyncio, "to_thread", hang)
+    tight = Settings(_env_file=None, read_timeout_s=0)  # deadline fires immediately
+    raised = False
+    try:
+        _run(DdgsSearcher(tight).search("redis", 2))
+    except SearchUnavailableError:
+        raised = True
+    assert raised

@@ -24,6 +24,7 @@ from memagent.memory.urls import url_hash
 from memagent.resources import AgentResources
 from memagent.security.sanitizer import sanitize
 from memagent.state import Chunk, FetchedDoc
+from memagent.utils.reliability import summary_retry
 
 SUMMARY_SYSTEM = (
     "Summarise the following web page content in 5 to 8 sentences. "
@@ -65,8 +66,15 @@ def make_ingest_content(resources: AgentResources):
 
                     summary: str | None = None
                     if not fresh:
-                        try:
-                            result = await resources.analytics_llm.complete(
+                        # A9: analytics is deliberately unwrapped (D3), so this SECOND consumer
+                        # owns its OWN bounded policy at the call-site — a local deadline
+                        # (asyncio.wait_for) plus the 2-attempt summary_retry from reliability.py
+                        # (the single retry-policy owner — nodes stay free of the retry library) —
+                        # so a single transient 429 does not permanently lose the summary.
+                        # Persistent failure still degrades to chunking-without-summary below.
+                        @summary_retry(settings)
+                        async def _summarise():
+                            return await resources.analytics_llm.complete(
                                 SUMMARY_SYSTEM,
                                 [
                                     {
@@ -74,6 +82,11 @@ def make_ingest_content(resources: AgentResources):
                                         "content": clean[: settings.summary_input_chars],
                                     }
                                 ],
+                            )
+
+                        try:
+                            result = await asyncio.wait_for(
+                                _summarise(), timeout=settings.classify_timeout_s
                             )
                             summary = result.text.strip() or None
                             out["tokens"][f"summary:{h}"] = result.usage
@@ -85,6 +98,16 @@ def make_ingest_content(resources: AgentResources):
                                     "detail": f"summary failed for {doc['url']}: {exc}"[:200],
                                 }
                             )
+
+                    # A6/T3: the summary is model-generated FROM the (already-sanitized) page, but
+                    # the summariser can echo/normalise an injection phrase the page-level regex
+                    # missed — and it is embedded + stored + KNN-indexed as a retrievable "summary"
+                    # doc. So re-sanitize it and MERGE any residual flags BEFORE it flows into
+                    # doc_out / store: stored text is ALWAYS sanitized text. sanitize() is
+                    # idempotent, so re-sanitizing an already-clean summary is a no-op.
+                    if summary is not None:
+                        summary, s_flags = sanitize(summary)
+                        flags = sorted(set(flags) | set(s_flags))
 
                     # Carry the sanitizer flags onto the output doc so answer_from_web can put
                     # them in the L2 provenance header (D10 producer root).

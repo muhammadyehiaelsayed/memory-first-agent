@@ -28,12 +28,15 @@ wipe:
 test:
 	uv run pytest -m "not integration and not e2e"
 
+# Exercises Redis in the isolated test namespace (separate test index / DB), not the demo
+# index -- safe to run against the same server as the live demo. Needs redis:8.2 up.
 test-integration:
 	uv run pytest -m "integration or e2e"
 
 lint:
 	uv run ruff check . && uv run ruff format --check .
 
+# Runs against the isolated test namespace (test index / DB), not the demo index.
 eval-lifecycle:
 	uv run python scripts/eval_lifecycle.py --mock
 
@@ -47,7 +50,8 @@ coverage:
 
 # Mirror ci.yml's lint/test/eval/coverage steps in order (tested == shipped);
 # ci.yml additionally runs a secret scan and pip-audit before these.
-# The integration leg needs redis:8.2 -- run `make redis-up` first.
+# The integration leg needs redis:8.2 -- run `make redis-up` first. It (and the eval leg)
+# exercise Redis in the isolated test namespace (test index / DB), never the demo index.
 ci: install lint
 	uv run pytest -m "not integration and not e2e" --cov=memagent --cov-report=term
 	uv run pytest -m "integration or e2e" --cov=memagent --cov-append --cov-report=term

@@ -77,6 +77,8 @@ def _is_private_host(host: str) -> bool:
     if host.lower() == "localhost":
         return True
 
+    _cgnat = ipaddress.ip_network("100.64.0.0/10")
+
     def _blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
         return (
             ip.is_private
@@ -84,6 +86,8 @@ def _is_private_host(host: str) -> bool:
             or ip.is_link_local
             or ip.is_reserved
             or ip.is_unspecified
+            or ip.is_multicast
+            or (ip.version == 4 and ip in _cgnat)
         )
 
     try:

@@ -504,7 +504,9 @@ def _agent_answers(live):
     async def go():
         admin = aioredis.from_url(live["settings"].redis_url)
         try:
-            await wipe_index(get_index(live["settings"], admin))  # empty index before the turn
+            await wipe_index(
+                get_index(live["settings"], admin), live["settings"]
+            )  # empty index before the turn
             return await live["agent"].answer(live["query"])
         finally:
             await admin.aclose()

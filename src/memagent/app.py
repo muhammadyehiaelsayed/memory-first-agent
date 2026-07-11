@@ -18,6 +18,7 @@ from memagent.memory.schema import assert_index_dims
 from memagent.memory.store import RedisMemoryStore, make_redis_client
 from memagent.resources import AgentResources
 from memagent.state import SourceRef
+from memagent.utils.errors import MemoryUnavailableError
 from memagent.web.fetch import HttpxPageFetcher
 from memagent.web.search import FallbackProvider
 
@@ -159,8 +160,15 @@ class Agent:
         self._ready = True
 
     async def answer(self, query: str) -> TurnResult:
-        await self.ensure_ready()
         state = new_turn_state(self.resources.settings, self.session_id, query)
+        try:
+            await self.ensure_ready()
+        except MemoryUnavailableError:
+            # H3: a startup Redis outage must NOT raise to the caller. Seed the turn exactly
+            # as nodes/memory.py's mid-run redis_down path does, so the graph still runs the
+            # web-fallback and log_turn writes one record — never a traceback (README).
+            state["degradation"] = "redis_down"
+            state["skip_store"] = True
         structlog.contextvars.bind_contextvars(turn_id=state["turn_id"])
         try:
             final = await self.graph.ainvoke(state)

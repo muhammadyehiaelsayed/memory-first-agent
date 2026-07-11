@@ -119,7 +119,7 @@ def _build_live_agent(bus, *, transform=None):
     settings, loop = bus["settings"], bus["loop"]
     probe_redis_or_skip(settings)  # skip-not-fail if Redis is unreachable (it is up here)
     admin = aioredis.from_url(settings.redis_url)
-    loop.run_until_complete(wipe_index(get_index(settings, admin)))
+    loop.run_until_complete(wipe_index(get_index(settings, admin), settings))
     loop.run_until_complete(admin.aclose())
 
     client = make_redis_client(settings)

@@ -53,7 +53,12 @@ class TurnLogger:
 def build_turn_record(state: dict, settings: Settings) -> dict:
     query = state["query"]
     web = None
-    if state.get("route") in _WEB_ROUTES:
+    # Gate on EVIDENCE the web pipeline ran, not the final route: a web turn that ends
+    # route="failed" (search error, or answer-LLM failure AFTER ingest persisted chunks)
+    # must still emit its web block. timed("web_search") stamps latency_ms["web_search"]
+    # whenever the web_search node executes, so that key is present on every web turn
+    # (including failed ones) and absent on the pure memory-hit path.
+    if state.get("route") in _WEB_ROUTES or "web_search" in state.get("latency_ms", {}):
         web = {
             "provider": state.get("search_provider"),
             "results_returned": len(state.get("search_results", [])),

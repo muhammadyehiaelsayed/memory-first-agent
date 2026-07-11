@@ -84,6 +84,17 @@ def test_fake_embedder_query_dominated_high_disjoint_low(fake_embedder):
     assert _cos(vq, vd) < 0.70  # disjoint token bags -> near-orthogonal
 
 
+# ---- A12: the Redis-touching fixtures carve out a namespace disjoint from the demo's ----
+def test_settings_fixture_isolates_the_redis_namespace(settings):
+    # Every Redis-backed test/eval reads the index name + key prefixes off this fixture, so they
+    # MUST all differ from the shipped demo namespace — otherwise `make test` (which runs against
+    # a live local Redis when one is up) would drop/repopulate the demo's own web_memory index.
+    default = Settings(_env_file=None)
+    assert settings.memory_index_name == "web_memory_test" != default.memory_index_name
+    assert settings.memory_chunk_prefix == "chunk_test" != default.memory_chunk_prefix
+    assert settings.memory_meta_prefix == "doc_test" != default.memory_meta_prefix
+
+
 # ---- FR-004: redis_url skips (never errors) when Redis is unreachable ----
 def test_probe_redis_or_skip_skips_on_dead_port():
     # Exercises the ACTUAL fixture helper (conftest.probe_redis_or_skip): an unreachable Redis

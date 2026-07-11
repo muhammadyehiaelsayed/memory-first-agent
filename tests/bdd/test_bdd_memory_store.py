@@ -181,7 +181,9 @@ def _construct_store(ctx):
 @then('it opens the shared "web_memory" vector index against that client')
 def _index_opened(ctx):
     index = ctx["store"]._index
-    assert index.schema.index.name == ctx["settings"].memory_index_name == "web_memory"
+    # the store opens the index NAMED PER SETTINGS (the default is "web_memory"; under test the
+    # fixture isolates to "web_memory_test" so the suite never touches the demo index)
+    assert index.schema.index.name == ctx["settings"].memory_index_name
     assert index.client is ctx["client"]
 
 
@@ -261,7 +263,7 @@ def _knn_lookup(ctx):
     async def _flow():
         client = aioredis.from_url(settings.redis_url)
         try:
-            await wipe_index(get_index(settings, client))
+            await wipe_index(get_index(settings, client), settings)
             store = RedisMemoryStore(settings, client)
             e0 = [0.0] * dim
             e0[0] = 1.0
@@ -281,7 +283,7 @@ def _knn_lookup(ctx):
             orthogonal = await store.knn(e1, k=5)
             cos07 = await store.knn(w, k=5)
             # re-wipe to a truly empty index -> a miss must be [] not an error
-            await wipe_index(get_index(settings, client))
+            await wipe_index(get_index(settings, client), settings)
             empty = await store.knn(e0, k=5)
             return identical, orthogonal, cos07, empty
         finally:
@@ -382,7 +384,7 @@ def _ingest_six(ctx):
     async def _flow():
         client = aioredis.from_url(settings.redis_url)
         try:
-            await wipe_index(get_index(settings, client))
+            await wipe_index(get_index(settings, client), settings)
             store = RedisMemoryStore(settings, client)
             page = _page(url, "Upsert")
             chunks6 = [_chunk(t, url, "Upsert", i) for i, t in enumerate(texts)]
@@ -391,7 +393,8 @@ def _ingest_six(ctx):
                 page=page, chunks=chunks6, vectors=vecs6, source_query="seed", flags=[]
             )
             h = url_hash(url)
-            ttl0 = await client.ttl(f"chunk:{h}:0")
+            cp, mp = settings.memory_chunk_prefix, settings.memory_meta_prefix
+            ttl0 = await client.ttl(f"{cp}:{h}:0")
             # round-trip the first chunk back out by KNN of its own embedding
             hits = await store.knn((await embedder.embed([texts[0]]))[0], k=5)
             top = hits[0]
@@ -402,9 +405,9 @@ def _ingest_six(ctx):
             ids3 = await store.store(
                 page=page, chunks=chunks3, vectors=vecs3, source_query="seed", flags=[]
             )
-            exists_stale = await client.exists(f"chunk:{h}:3", f"chunk:{h}:5")
-            exists_kept = await client.exists(f"chunk:{h}:2")
-            num = await client.hget(f"doc:{h}", "num_chunks")
+            exists_stale = await client.exists(f"{cp}:{h}:3", f"{cp}:{h}:5")
+            exists_kept = await client.exists(f"{cp}:{h}:2")
+            num = await client.hget(f"{mp}:{h}", "num_chunks")
             return {
                 "ids6": ids6,
                 "ttl0": ttl0,
@@ -467,7 +470,7 @@ def _check_freshness(ctx):
     async def _flow():
         client = aioredis.from_url(settings.redis_url)
         try:
-            await wipe_index(get_index(settings, client))
+            await wipe_index(get_index(settings, client), settings)
             store = RedisMemoryStore(settings, client)
             url = "https://redis.io/fresh"
             page = _page(url, "Fresh")

@@ -151,7 +151,7 @@ async def test_meta_hash_has_ttl(clean_index, fake_embedder, settings):
         source_query="q",
         flags=[],
     )
-    ttl = await clean_index.client.ttl(f"doc:{url_hash(page['url'])}")
+    ttl = await clean_index.client.ttl(f"{settings.memory_meta_prefix}:{url_hash(page['url'])}")
     assert 0 < ttl <= settings.memory_ttl_seconds  # bounded expiry, not -1 (unbounded)
 
 
@@ -191,6 +191,7 @@ async def test_store_batches_writes_in_one_pipeline(clean_index, fake_embedder, 
     assert calls["execute"] == 1
     # the batched writes still land: every chunk round-trips out with a bounded TTL.
     h = url_hash(page["url"])
-    stored = await clean_index.client.hget(f"chunk:{h}:0", "chunk_text")
+    cp = settings.memory_chunk_prefix
+    stored = await clean_index.client.hget(f"{cp}:{h}:0", "chunk_text")
     assert (stored.decode() if isinstance(stored, bytes) else stored) == texts[0]
-    assert 0 < await clean_index.client.ttl(f"chunk:{h}:5") <= settings.memory_ttl_seconds
+    assert 0 < await clean_index.client.ttl(f"{cp}:{h}:5") <= settings.memory_ttl_seconds

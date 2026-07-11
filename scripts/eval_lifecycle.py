@@ -42,13 +42,25 @@ async def _run_mock() -> int:
     from memagent.utils.errors import redis_down_in_chain
     from tests.conftest import build_test_resources
 
-    settings = Settings(_env_file=None, wait_cap_scale=0.0, tavily_api_key="test-key")
+    # A12: --mock wipes per question (wipe_index does create(overwrite=True, drop=True) + a
+    # meta-prefix scan delete), so it MUST run against an isolated namespace that can never be
+    # the demo's. RediSearch indexes are instance-global (they ignore logical DBs and refuse a
+    # second index over an already-indexed prefix), so isolate by a distinct index name AND
+    # distinct key prefixes on the same DB: wipe_index then drops "web_memory_test" and scans
+    # "doc_test:*" only — the demo's web_memory / chunk:* / doc:* stay untouchable.
+    settings = Settings(_env_file=None, wait_cap_scale=0.0, tavily_api_key="test-key").model_copy(
+        update={
+            "memory_index_name": "web_memory_test",
+            "memory_chunk_prefix": "chunk_test",
+            "memory_meta_prefix": "doc_test",
+        }
+    )
     client = make_redis_client(settings)
     failures: list[str] = []
     try:
         index = get_index(settings, client)
         for question, url in QUESTIONS:
-            await wipe_index(index)  # fresh slate so turn 1 is a genuine miss
+            await wipe_index(index, settings)  # fresh slate so turn 1 is a genuine miss
             with respx.mock(assert_all_called=False) as mock:
                 mock.post("https://api.tavily.com/search").mock(
                     return_value=httpx.Response(

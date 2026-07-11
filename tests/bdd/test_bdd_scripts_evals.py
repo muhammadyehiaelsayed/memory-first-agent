@@ -87,6 +87,15 @@ def _passing_judge() -> FakeLLM:
     )
 
 
+def _failing_judge() -> FakeLLM:
+    # every dimension bad -> the ok-predicate is False -> real mode must exit 1 (A13)
+    return FakeLLM(
+        schema_factory=lambda schema: GROUNDING.GroundingVerdict(
+            grounded=False, citations_valid=False, abstained_correctly=False
+        )
+    )
+
+
 # --------------------------------------------------------------------------- #
 # shared steps
 # --------------------------------------------------------------------------- #
@@ -307,10 +316,27 @@ def _stub_grounding_clients(monkeypatch):
     return {}
 
 
+@given("the OpenAI client builder is stubbed with a failing grounding judge", target_fixture="ctx")
+def _stub_grounding_clients_failing(monkeypatch):
+    import memagent.llm.clients as clients_mod
+
+    def _fake_build(settings):
+        answerer = FakeLLM(answer=f"Grounded in the context. Sources:\n- {GROUNDING.SRC}")
+        return answerer, _failing_judge(), FakeEmbedder(settings.embedding_dim)
+
+    monkeypatch.setattr(clients_mod, "build_openai_clients", _fake_build)
+    return {}
+
+
 @when("the grounding real run executes")
 def _do_run_real_grounding(ctx, capsys):
     ctx["rc"] = asyncio.run(GROUNDING._run_real())
     ctx["out"] = capsys.readouterr().out
+
+
+@then("it returns exit code 1")
+def _returns_one(ctx):
+    assert ctx["rc"] == 1
 
 
 # --------------------------------------------------------------------------- #

@@ -329,12 +329,15 @@ def ensure_live_index(redis_url, settings):
     "the OpenAI client factory is replaced with a deterministic fake embedder",
     target_fixture="seed_embedder",
 )
-def patch_client_factory(monkeypatch, fake_embedder):
+def patch_client_factory(monkeypatch, fake_embedder, settings):
     monkeypatch.setattr(
         seed_memory,
         "build_openai_clients",
         lambda settings: (object(), object(), fake_embedder),
     )
+    # seed() builds its own Settings() (default namespace); pin it to the isolated test
+    # namespace so the seed writes chunk_test:/web_memory_test and never the demo's chunk:
+    monkeypatch.setattr(seed_memory, "Settings", lambda *a, **k: settings)
     return fake_embedder
 
 
@@ -358,7 +361,8 @@ def keys_present_in_redis(seed_result, settings):
     async def _check():
         client = aioredis.from_url(settings.redis_url)
         try:
-            return [await client.exists(f"chunk:{h}:{i}") for i in range(seed_result["n"])]
+            cp = settings.memory_chunk_prefix
+            return [await client.exists(f"{cp}:{h}:{i}") for i in range(seed_result["n"])]
         finally:
             await client.aclose()
 

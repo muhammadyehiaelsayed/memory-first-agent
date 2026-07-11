@@ -4,7 +4,9 @@ TavilySearcher holds a reusable httpx.AsyncClient (never the vendor SDK package,
 be invisible to respx) with explicit connect/read timeouts, and applies the tenacity
 tavily_retry policy at its single POST call-site: 429/5xx are retried then surfaced as
 SearchUnavailableError; 4xx re-raise the original so FallbackProvider falls through to the
-keyless ddgs provider. Retries live only here — one owner (Constitution P-III).
+keyless ddgs provider. Each searcher owns its own single retry policy (Constitution P-III):
+Tavily via tavily_retry here, and the keyless ddgs leg via an inline deadline + bounded retry
+inside DdgsSearcher.search (ddgs ships no agent-owned policy of its own).
 """
 
 import asyncio
@@ -67,19 +69,40 @@ class TavilySearcher:
 
 
 class DdgsSearcher:
-    """Keyless DuckDuckGo; ddgs is synchronous so it runs via asyncio.to_thread."""
+    """Keyless DuckDuckGo; ddgs is synchronous so it runs via asyncio.to_thread.
+
+    ddgs ships no agent-owned retry policy, so this call-site owns one (A9, Constitution
+    P-III): each attempt runs under an agent-owned deadline (asyncio.wait_for on
+    read_timeout_s) and a single transient blip is retried once. Persistent failure/timeout
+    degrades to the typed SearchUnavailableError — FallbackProvider then reports
+    provider_used=None, never a raw traceback.
+    """
+
+    def __init__(self, settings: Settings | None = None):
+        # Optional so the keyless no-arg construction stays valid; FallbackProvider always
+        # passes the real settings, from which the per-attempt deadline is read.
+        self._settings = settings or Settings(_env_file=None)
 
     async def search(self, query: str, k: int) -> list[SearchResult]:
-        rows = await asyncio.to_thread(lambda: list(DDGS().text(query, max_results=k)))
-        return [
-            SearchResult(
-                url=r.get("href", ""),
-                title=r.get("title", ""),
-                snippet=r.get("body", ""),
-                rank=i,
-            )
-            for i, r in enumerate(rows[:k])
-        ]
+        last_exc: Exception | None = None
+        for _ in range(2):  # 2 attempts — bounded budget, mirroring fetch_retry
+            try:
+                rows = await asyncio.wait_for(
+                    asyncio.to_thread(lambda: list(DDGS().text(query, max_results=k))),
+                    timeout=self._settings.read_timeout_s,
+                )
+                return [
+                    SearchResult(
+                        url=r.get("href", ""),
+                        title=r.get("title", ""),
+                        snippet=r.get("body", ""),
+                        rank=i,
+                    )
+                    for i, r in enumerate(rows[:k])
+                ]
+            except Exception as exc:  # noqa: BLE001 — retry a transient ddgs/timeout blip
+                last_exc = exc
+        raise SearchUnavailableError(str(last_exc)) from last_exc
 
 
 class FallbackProvider:
@@ -92,7 +115,7 @@ class FallbackProvider:
     def __init__(self, settings: Settings):
         self._settings = settings
         self._tavily = TavilySearcher(settings)
-        self._ddgs = DdgsSearcher()
+        self._ddgs = DdgsSearcher(settings)
         self.provider_used: str | None = None
 
     async def search(self, query: str, k: int) -> list[SearchResult]:
