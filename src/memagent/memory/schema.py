@@ -4,10 +4,11 @@ Redis COSINE returns *distance*; the similarity conversion (1 - distance) is an 
 concern and lives in memory/store.py only. The metric is fixed here as cosine so
 that conversion will hold exactly (OpenAI embeddings are L2-normalized).
 
-Key layout written by the store (M2): chunk:{url_hash}:{i} for chunks,
-chunk:{url_hash}:summary for the per-page summary doc (indexed — participates in
-KNN routing), plus the NON-indexed meta hash doc:{url_hash}. Only the chunk:
-prefix is scanned by the index.
+Key layout written by the store (M2): {chunk_prefix}:{url_hash}:{i} for chunks,
+{chunk_prefix}:{url_hash}:summary for the per-page summary doc (indexed — participates
+in KNN routing), plus the NON-indexed meta hash {meta_prefix}:{url_hash}. Only the
+chunk prefix is scanned by the index. Both prefixes come from Settings (default "chunk"
+/ "doc") so a test/eval can carve out a disjoint namespace on the same Redis.
 
 prefix trap: redisvl builds the Redis PREFIX as prefix + key_separator, so
 prefix="chunk" + key_separator=":" -> PREFIX "chunk:". Setting prefix="chunk:"
@@ -25,7 +26,8 @@ def build_schema(settings: Settings) -> IndexSchema:
         {
             "index": {
                 "name": settings.memory_index_name,  # "web_memory"
-                "prefix": "chunk",  # + key_separator ":" -> Redis PREFIX "chunk:"
+                # + key_separator ":" -> Redis PREFIX "<prefix>:" (default "chunk:")
+                "prefix": settings.memory_chunk_prefix,
                 "key_separator": ":",
                 "storage_type": "hash",
             },
@@ -67,19 +69,24 @@ async def ensure_index(index: AsyncSearchIndex) -> bool:
     return True
 
 
-async def wipe_index(index: AsyncSearchIndex) -> None:
+async def wipe_index(index: AsyncSearchIndex, settings: Settings) -> None:
     """Drop the index AND its keys, then recreate empty (wipe-memory / dims-change recovery).
 
-    Also deletes the NON-indexed doc:{url_hash} meta hashes: they carry the freshness
+    Also deletes the NON-indexed {meta_prefix}:{url_hash} meta hashes: they carry the freshness
     bookkeeping (fetched_at) and the upsert generation count (num_chunks). Leaving them
     behind would make M3's freshness gate skip re-ingesting any URL seen < 24h before
     the wipe — memory would silently stay empty for those URLs (found live, 2026-07-05).
+
+    ``settings`` is REQUIRED (not defaulted) so the meta-prefix scan always matches the same
+    namespace as the index being dropped: a caller operating on an isolated test namespace can
+    never accidentally purge the demo's "doc:*" keys via a stale default.
     """
     await index.create(overwrite=True, drop=True)
     client = index.client
     if client is None:
         return
-    stale = [key async for key in client.scan_iter(match="doc:*", count=500)]
+    match = f"{settings.memory_meta_prefix}:*"
+    stale = [key async for key in client.scan_iter(match=match, count=500)]
     if stale:
         await client.delete(*stale)
 

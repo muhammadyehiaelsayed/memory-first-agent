@@ -37,6 +37,7 @@ Feature: Web search with Tavily-first, keyless ddgs fallback (src/memagent/web/s
 
   # source: milestone-3-web-pipeline.md :: ddgs fallback runs off the event loop and is keyless
   # covers: memagent.web.search.DdgsSearcher.search
+  # covers: memagent.web.search.DdgsSearcher.__init__
   Scenario: The keyless DuckDuckGo fallback maps result fields and ranks by order
     Given a stubbed ddgs backend returning two rows
     When the ddgs searcher searches without any API key

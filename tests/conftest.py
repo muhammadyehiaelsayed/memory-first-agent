@@ -50,7 +50,25 @@ def settings(tmp_path, monkeypatch):
         "WAIT_CAP_SCALE", "0"
     )  # instant retries through the PROD path (no monkeypatched sleeps)
     monkeypatch.setenv("TURN_LOG_PATH", str(tmp_path / "turns.jsonl"))
-    return Settings()
+    # A12: every Redis-touching test/fixture reads redis_url + memory_index_name + the key
+    # prefixes off THIS settings object — clean_index/resources here, AND test_redis_store's
+    # direct get_index(settings) + index.delete(drop=True) — so isolating here steers them ALL
+    # off the live demo. RediSearch indexes are INSTANCE-GLOBAL: they ignore logical DBs (SELECT)
+    # and refuse a second index over an already-indexed prefix, so a distinct DB or a distinct
+    # index name ALONE cannot avoid clobbering the demo. We carve out a fully disjoint namespace
+    # on the SAME DB: a distinct index name ("web_memory_test") AND distinct key prefixes
+    # ("chunk_test"/"doc_test"). wipe_index(index, settings) then drops "web_memory_test" and
+    # scans "doc_test:*" only — the demo's web_memory / chunk:* / doc:* are untouchable. Keyless
+    # unit tests are unaffected: they use a fresh Settings() / their own SETTINGS (test_smoke,
+    # test_m1_contracts, test_guardrails, test_turnlog) or read only wait_cap_scale/turn_log_path
+    # off this fixture (test_m6_fixtures, e2e), never its index/prefix.
+    return Settings().model_copy(
+        update={
+            "memory_index_name": "web_memory_test",
+            "memory_chunk_prefix": "chunk_test",
+            "memory_meta_prefix": "doc_test",
+        }
+    )
 
 
 # ---- deterministic FakeEmbedder (FR-003) ------------------------------------
@@ -162,7 +180,8 @@ async def clean_index(redis_url, settings):
 
     client = aioredis.from_url(settings.redis_url)
     index = get_index(settings, client)
-    await wipe_index(index)  # create(overwrite=True, drop=True) + doc:* purge -> truly empty
+    # settings carries the isolated namespace, so wipe scans "doc_test:*" -> never the demo
+    await wipe_index(index, settings)  # create(overwrite=True, drop=True) + meta purge -> empty
     yield index
     await client.aclose()
 

@@ -152,8 +152,15 @@ async def _run_real() -> int:
     from memagent.llm.clients import build_openai_clients
 
     conv, analytics, _ = build_openai_clients(Settings(_env_file=None))
-    _render(await _score(conv, analytics))
-    return 0
+    rows = await _score(conv, analytics)
+    _render(rows)
+    # Same ok-predicate as _run_mock: real mode must also gate on the judge's
+    # grounding/citation/abstention verdicts instead of always returning 0.
+    ok = all(
+        v.abstained_correctly and (expect == "abstain" or (v.grounded and v.citations_valid))
+        for _q, expect, v in rows
+    )
+    return 0 if ok else 1
 
 
 def main() -> int:

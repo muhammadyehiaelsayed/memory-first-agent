@@ -63,3 +63,12 @@ Feature: Single-owner retry policies translate transport failures into typed dep
     Then it raises PageFetchError after a single attempt
     When a guarded fetch times out once then returns the page
     Then the guarded call returns the page after exactly 2 attempts
+
+  # source: review remediation :: A9 (the ingest page-summary consumer of the unwrapped analytics client owns a bounded retry)
+  # covers: memagent.utils.reliability.summary_retry
+  Scenario: The page summary retries a transient error once then re-raises after the 2-attempt budget
+    Given a summary call guarded by the summary_retry policy with instant retries
+    When a guarded summary times out once then returns the summary
+    Then the guarded call returns the summary after exactly 2 attempts
+    When a guarded summary keeps failing with a transient connection error
+    Then the original error propagates after exactly 2 attempts so ingest degrades

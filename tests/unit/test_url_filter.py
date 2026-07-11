@@ -62,3 +62,24 @@ def test_is_private_host_predicate():
         assert _is_private_host(host) is True, host
     for host in ("8.8.8.8", "example.com", "redis.io"):
         assert _is_private_host(host) is False, host
+
+
+def test_multicast_and_cgnat_hosts_are_blocked():
+    # Newly-closed SSRF gaps: multicast (v4 + v6) and the 100.64.0.0/10 CGNAT range.
+    for host in ("224.0.0.1", "239.255.255.250", "ff02::1", "100.64.0.1", "100.127.255.254"):
+        assert _is_private_host(host) is True, host
+    # A public /24 adjacent to CGNAT (100.128.0.0 is NOT in 100.64.0.0/10) stays allowed.
+    assert _is_private_host("100.128.0.1") is False
+    # Regression guard: already-blocked ranges must remain blocked after the tightening.
+    for host in ("169.254.169.254", "10.0.0.5", "127.0.0.1", "::1"):
+        assert _is_private_host(host) is True, host
+
+
+def test_filter_urls_drops_multicast_and_cgnat_ip_literals():
+    urls = [
+        "http://224.0.0.1/",  # multicast (v4)
+        "http://239.255.255.250/ssdp",  # SSDP multicast
+        "http://100.64.0.1/",  # CGNAT
+        "https://8.8.8.8/",  # public — still kept
+    ]
+    assert filter_urls(urls, S) == ["https://8.8.8.8/"]

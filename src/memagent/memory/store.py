@@ -156,7 +156,9 @@ class RedisMemoryStore:
         flags: list[str],
     ) -> list[str]:
         h = url_hash(page["url"])
-        meta_key = f"doc:{h}"
+        cp = self._settings.memory_chunk_prefix
+        mp = self._settings.memory_meta_prefix
+        meta_key = f"{mp}:{h}"
         summary = page.get("summary")
 
         expected = len(chunks) + (1 if summary is not None else 0)
@@ -171,7 +173,7 @@ class RedisMemoryStore:
         old = await self._io(self._redis.hgetall(meta_key))
         if old:
             old_n = int(old.get(b"num_chunks", b"0"))
-            stale = [f"chunk:{h}:{i}" for i in range(old_n)] + [f"chunk:{h}:summary"]
+            stale = [f"{cp}:{h}:{i}" for i in range(old_n)] + [f"{cp}:{h}:summary"]
             await self._io(self._redis.delete(*stale))
 
         fetched_at = int(time.time())
@@ -207,10 +209,10 @@ class RedisMemoryStore:
                     pipe.expire(key, ttl)
 
             if summary is not None:
-                _queue(f"chunk:{h}:summary", summary, "summary", -1, vectors[0])
+                _queue(f"{cp}:{h}:summary", summary, "summary", -1, vectors[0])
 
             for i, (chunk, vec) in enumerate(zip(chunks, chunk_vectors)):
-                key = f"chunk:{h}:{i}"
+                key = f"{cp}:{h}:{i}"
                 _queue(key, chunk["text"], "chunk", i, vec)
                 stored_ids.append(key)
 
@@ -225,7 +227,8 @@ class RedisMemoryStore:
         return stored_ids
 
     async def is_fresh(self, h: str) -> bool:
-        fetched_at = await self._io(self._redis.hget(f"doc:{h}", "fetched_at"))
+        meta_key = f"{self._settings.memory_meta_prefix}:{h}"
+        fetched_at = await self._io(self._redis.hget(meta_key, "fetched_at"))
         if fetched_at is None:
             return False
         return time.time() - float(fetched_at) < self._settings.freshness_window_seconds

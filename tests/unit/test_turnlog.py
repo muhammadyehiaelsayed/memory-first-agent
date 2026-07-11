@@ -137,6 +137,30 @@ def test_web_route_builds_web_block():
     }
 
 
+def test_failed_web_turn_still_emits_web_block_and_hit_stays_null():
+    # A8: a web turn that ends route="failed" (e.g. answer-LLM failure after ingest already
+    # persisted chunks) must NOT lose its web block just because the final route is "failed".
+    # timed("web_search") stamps latency_ms["web_search"] whenever the web pipeline ran, so
+    # gate on that evidence rather than the route.
+    failed = make_state(
+        "failed",
+        search_provider="tavily",
+        search_results=[{"url": "u", "title": "t", "snippet": "s", "rank": 0}] * 4,
+        fetched_docs=[{"url": "u", "title": "t", "markdown": "m", "summary": None, "ok": True}] * 2,
+        stored_chunk_ids=[f"chunk:h:{i}" for i in range(9)],  # 9 chunks DID persist before failure
+        latency_ms={"web_search": 210, "fetch": 480, "ingest": 90},
+    )
+    web = build_turn_record(failed, Settings())["web"]
+    assert web == {
+        "provider": "tavily",
+        "results_returned": 4,
+        "pages_fetched": 2,
+        "chunks_ingested": 9,  # persisted chunks survive into the record despite route="failed"
+    }
+    # a pure memory-hit turn never enters web_search, so the signal is absent -> web stays null
+    assert build_turn_record(make_state("memory_hit"), Settings())["web"] is None
+
+
 def test_blocked_turn_is_still_logged(tmp_path):
     logger = TurnLogger(str(tmp_path / "turns.jsonl"))
     log_turn = make_log_turn(Resources(logger))

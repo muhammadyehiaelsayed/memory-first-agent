@@ -4,7 +4,10 @@ services:
     container_name: memagent-redis
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      # Bind to loopback only: an unauthenticated Redis on 0.0.0.0 would let any LAN host
+      # read/delete/poison memory (bypassing the ingestion sanitizer). This is the local-only
+      # trust boundary for a single-user dev/demo stack.
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -18,7 +21,8 @@ services:
     image: redis/redisinsight:latest
     container_name: memagent-redisinsight
     ports:
-      - "5540:5540"
+      # Loopback-only, same local trust boundary as redis above.
+      - "127.0.0.1:5540:5540"
     depends_on:
       redis:
         condition: service_healthy

@@ -4,9 +4,10 @@ Factories over Settings so tests drive the production path with WAIT_CAP_SCALE=0
 monkeypatched sleeps — the wait cap collapses to 0 while the attempt count and code path
 are unchanged). Full jitter + before_sleep_log for free "retrying in 1.7s after 429"
 observability. Typed-error translation lives here so nodes never see raw transport errors:
-- llm_retry:    4 attempts, cap 20s; fast-fail 400/401/403/404/422; exhaustion+fast-fail → LLMUnavailableError
-- tavily_retry: 3 attempts, cap 8s;  fast-fail 400/401/403 → RE-RAISE original (feeds the ddgs fallback); exhaustion → SearchUnavailableError
-- fetch_retry:  2 attempts, cap 2s;  non-retryable status/exhaustion → PageFetchError (per-URL, non-fatal)
+- llm_retry:     4 attempts, cap 20s; fast-fail 400/401/403/404/422; exhaustion+fast-fail → LLMUnavailableError
+- tavily_retry:  3 attempts, cap 8s;  fast-fail 400/401/403 → RE-RAISE original (feeds the ddgs fallback); exhaustion → SearchUnavailableError
+- fetch_retry:   2 attempts, cap 2s;  non-retryable status/exhaustion → PageFetchError (per-URL, non-fatal)
+- summary_retry: 2 attempts, cap 8s;  RE-RAISE original on exhaustion so ingest degrades to chunking-without-summary (the analytics client is unwrapped by D3; its ingest-summary consumer owns this policy)
 """
 
 import functools
@@ -112,6 +113,34 @@ def tavily_retry(settings: Settings):
                 if _is_retryable_tavily(exc):
                     raise SearchUnavailableError(str(exc)) from exc  # exhaustion
                 raise  # 400/401/403 (or other) → original, so FallbackProvider hits ddgs
+
+        return wrapper
+
+    return decorator
+
+
+def summary_retry(settings: Settings):
+    """2-attempt retry for the ingest page-summary call (A9).
+
+    The analytics client is deliberately left unwrapped (D3) so each of its two consumers owns
+    a policy at the call-site: classify.py has its own, and this is ingest's summary consumer.
+    Retries the transient LLM errors, then RE-RAISES the original on exhaustion so
+    ingest_content's guard degrades to chunking-without-summary — a lost summary is tolerated,
+    never fatal. Keeping the tenacity dependency here (not in the node) preserves the
+    "retries live only in reliability.py" invariant."""
+    wait = wait_random_exponential(multiplier=1, max=_max_wait(8.0, settings))
+
+    def decorator(fn):
+        @functools.wraps(fn)
+        async def wrapper(*args, **kwargs):
+            retryer = AsyncRetrying(
+                stop=stop_after_attempt(2),
+                wait=wait,
+                retry=retry_if_exception(_is_retryable_llm),
+                before_sleep=before_sleep_log(logger, logging.WARNING),
+                reraise=True,
+            )
+            return await retryer(fn, *args, **kwargs)
 
         return wrapper
 

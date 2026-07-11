@@ -21,7 +21,7 @@ from memagent.config import Settings
 from memagent.memory.schema import get_index, wipe_index
 from memagent.memory.store import make_redis_client
 from memagent.routers import route_after_memory
-from memagent.utils.errors import REDIS_DOWN_ERRORS, redis_down_in_chain
+from memagent.utils.errors import REDIS_DOWN_ERRORS, MemoryUnavailableError, redis_down_in_chain
 
 app = typer.Typer(add_completion=False, help="Memory-first web agent")
 
@@ -186,7 +186,7 @@ async def _wipe() -> None:
     client = make_redis_client(settings)
     try:
         index = get_index(settings, client)
-        await wipe_index(index)
+        await wipe_index(index, settings)
         typer.echo(f"Wiped and recreated index '{settings.memory_index_name}'.")
     finally:
         await client.aclose()
@@ -239,8 +239,15 @@ async def _ask(query: str, settings: Settings):
 
     configure_logging(settings)
     agent = Agent()
-    await agent.ensure_ready()
     state = new_turn_state(settings, agent.session_id, query)
+    try:
+        await agent.ensure_ready()
+    except MemoryUnavailableError:
+        # H3: a startup Redis outage must NOT crash the CLI — seed the turn as a mid-run
+        # redis_down outage would (nodes/memory.py) so the graph runs the web fallback and
+        # log_turn writes one record (README: web-only on Redis down, never a traceback).
+        state["degradation"] = "redis_down"
+        state["skip_store"] = True
     structlog.contextvars.bind_contextvars(turn_id=state["turn_id"])
     try:
         merged, _mem, _blocked = await _stream_turn(agent, state)
@@ -287,11 +294,18 @@ async def _chat(settings: Settings) -> None:
     import structlog
 
     from memagent.app import Agent, configure_logging, new_turn_state
-    from memagent.nodes.answer import FAILURE_APOLOGY
+    from memagent.nodes.answer import FAILURE_APOLOGIES
 
     configure_logging(settings)
     agent = Agent()
-    await agent.ensure_ready()  # REPL drives the graph directly, so provision the index here
+    try:
+        await agent.ensure_ready()  # REPL drives the graph directly, so provision the index here
+        memory_ready = True
+    except MemoryUnavailableError:
+        # H3: Redis down at startup — run the REPL web-only rather than crashing. Each turn
+        # is seeded as a redis_down degradation (below) so memory_search yields no hit, the
+        # web fallback runs, and every turn is logged (README: never a traceback).
+        memory_ready = False
     history: list[dict] = []
     tty = sys.stdout.isatty()
     err_tty = sys.stderr.isatty()
@@ -383,6 +397,9 @@ async def _chat(settings: Settings) -> None:
                 _err.print(f"[dim]Unknown command '{query}' — type /help to see what I can do.[/]")
             continue
         state = new_turn_state(settings, agent.session_id, query, history)
+        if not memory_ready:  # H3: startup Redis outage → force this turn onto the web path
+            state["degradation"] = "redis_down"
+            state["skip_store"] = True
         # The REPL bypasses Agent.answer(), so it binds its own turn_id (FR-M4-21).
         structlog.contextvars.bind_contextvars(turn_id=state["turn_id"])
         try:
@@ -398,7 +415,7 @@ async def _chat(settings: Settings) -> None:
             structlog.contextvars.clear_contextvars()
         # The spinner is stopped now, so these stdout lines never interleave with it.
         answer = merged.get("answer")
-        failed = answer is not None and answer == FAILURE_APOLOGY
+        failed = answer is not None and answer in FAILURE_APOLOGIES
         if tty:
             typer.echo("")  # breathing room between the input line and the result
         if blocked:
@@ -424,7 +441,9 @@ async def _chat(settings: Settings) -> None:
         # A blocked or failed turn is not a real exchange — never replay its canned text as
         # trusted user/assistant context on later turns.
         if answer and not blocked and not failed:
-            history.append({"role": "user", "content": query})
+            # H1: store the guard-capped sanitized_query as the replayed user turn, so a
+            # past-cap injection can't re-enter the model through chat history.
+            history.append({"role": "user", "content": merged.get("sanitized_query") or query})
             history.append({"role": "assistant", "content": answer})
             history[:] = history[-settings.history_max_turns * 2 :]
 

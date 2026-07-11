@@ -35,6 +35,7 @@ from memagent.utils.reliability import (
     _status,
     fetch_retry,
     llm_retry,
+    summary_retry,
     tavily_retry,
 )
 from memagent.utils.timing import timed
@@ -333,6 +334,60 @@ def _fetch_recover(ctx):
 def _fetch_recovered(ctx):
     assert ctx["fetch_result"] == "page-markdown"
     assert ctx["recover_calls"] == 2  # 1 retryable timeout + 1 success, capped at 2 attempts
+
+
+# ============================================================================
+# reliability.py :: summary_retry
+# ============================================================================
+@given(
+    "a summary call guarded by the summary_retry policy with instant retries",
+    target_fixture="ctx",
+)
+def _summary_ctx():
+    return {"settings": _instant_settings()}
+
+
+@when("a guarded summary times out once then returns the summary")
+def _summary_recover(ctx):
+    calls = {"n": 0}
+
+    async def flaky_summary():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise APIConnectionError(request=_REQ)
+        return "a-summary"
+
+    ctx["summary_result"] = asyncio.run(summary_retry(ctx["settings"])(flaky_summary)())
+    ctx["summary_recover_calls"] = calls["n"]
+
+
+@then("the guarded call returns the summary after exactly 2 attempts")
+def _summary_recovered(ctx):
+    assert ctx["summary_result"] == "a-summary"
+    assert ctx["summary_recover_calls"] == 2  # 1 retryable failure + 1 success, capped at 2
+
+
+@when("a guarded summary keeps failing with a transient connection error")
+def _summary_persistent(ctx):
+    calls = {"n": 0}
+
+    async def always_fail():
+        calls["n"] += 1
+        raise APIConnectionError(request=_REQ)
+
+    try:
+        asyncio.run(summary_retry(ctx["settings"])(always_fail)())
+    except Exception as exc:  # noqa: BLE001
+        ctx["summary_raised"] = exc
+    ctx["summary_fail_calls"] = calls["n"]
+
+
+@then("the original error propagates after exactly 2 attempts so ingest degrades")
+def _summary_reraised(ctx):
+    # re-raised original (NOT a typed error) so ingest_content's guard degrades to
+    # chunking-without-summary rather than treating it as a hard dependency failure.
+    assert isinstance(ctx["summary_raised"], APIConnectionError)
+    assert ctx["summary_fail_calls"] == 2
 
 
 # ============================================================================

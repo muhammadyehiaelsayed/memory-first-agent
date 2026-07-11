@@ -46,6 +46,14 @@ Feature: Grounding eval harness demonstrates cited, abstaining answers (scripts/
     Then it prints an aggregate scorecard
     And it returns exit code 0
 
+  # source: review remediation :: A13 (real mode now GATES on the judge's verdicts, not always exit 0)
+  # covers: scripts.eval_grounding._run_real
+  Scenario: The real run exits non-zero when the judge reports a bad grounding verdict
+    Given the OpenAI client builder is stubbed with a failing grounding judge
+    When the grounding real run executes
+    Then it prints an aggregate scorecard
+    And it returns exit code 1
+
   # covers: scripts.eval_grounding.main
   Scenario: The grounding entrypoint runs keylessly under the mock flag and exits zero
     Given no API key and no Redis are available

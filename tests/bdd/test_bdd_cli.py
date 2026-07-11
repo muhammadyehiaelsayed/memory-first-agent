@@ -29,6 +29,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 import memagent.app as app_mod
 import memagent.cli as cli
 from memagent.app import TurnResult
+from memagent.config import Settings
 
 scenarios("features/cli.feature")
 
@@ -292,12 +293,14 @@ def _given_wipe_stubs(ctx, monkeypatch, settings):
     calls = {}
 
     def fake_wipe_index_factory():
-        async def fake_wipe_index(index):
+        async def fake_wipe_index(index, settings=None):  # wipe_index now takes (index, settings)
             calls["wiped"] = index
 
         return fake_wipe_index
 
-    monkeypatch.setattr(cli, "Settings", lambda: settings)
+    # fully faked (no real Redis): use a DEFAULT Settings so the echoed index name is the
+    # shipped "web_memory", not the isolated fixture's test name
+    monkeypatch.setattr(cli, "Settings", lambda: Settings(_env_file=None))
     monkeypatch.setattr(cli, "make_redis_client", lambda s: client)
     monkeypatch.setattr(cli, "get_index", lambda s, c: sentinel_index)
     monkeypatch.setattr(cli, "wipe_index", fake_wipe_index_factory())

@@ -17,6 +17,18 @@ LOW_CONFIDENCE_DISCLAIMER = (
     "only on search result snippets and may be incomplete or less reliable."
 )
 
+# A7: on the miss path ingest_content may have persisted chunks BEFORE the answer LLM
+# failed, so the generic "Nothing was stored" line would be false. This variant is used
+# only in answer_from_web's failure branch when stored_chunk_ids is nonempty.
+WEB_FAILURE_AFTER_STORE_APOLOGY = (
+    "I'm sorry - I can't answer that right now because a required step failed. "
+    "Fetched pages were saved to memory, but the answer step failed. Please try again."
+)
+
+# cli._chat classifies a turn as failed by matching the answer text; BOTH apology
+# variants must count as a failed turn (FR-M5-27).
+FAILURE_APOLOGIES = (FAILURE_APOLOGY, WEB_FAILURE_AFTER_STORE_APOLOGY)
+
 
 def _dedupe_sources(hits: list[dict], origin: str) -> list[SourceRef]:
     seen: set[str] = set()
@@ -31,11 +43,22 @@ def _dedupe_sources(hits: list[dict], origin: str) -> list[SourceRef]:
 
 def make_answer_from_memory(resources: AgentResources):
     async def answer_from_memory(state: dict) -> dict:
+        # A11: keep only at/above-threshold hits — knn returns the raw top-k, but the router
+        # only guarantees hits[0] cleared the threshold, so below-threshold neighbours must
+        # not dilute the context or surface as displayed sources (the list is never empty
+        # here: hits[0] survives by construction of this branch). The threshold is always in
+        # real state; guard the read so a direct-call state that omits it is not filtered.
         hits = state["memory_hits"]
+        threshold = state.get("threshold")
+        if threshold is not None:
+            hits = [h for h in hits if h["similarity"] >= threshold]
         context = wrap_context(hits, origin="memory")
+        # H1: the model sees the guard-capped sanitized_query, never the raw query, so a
+        # past-cap injection can't reach it (fallback keeps direct-call/older state working).
+        query = state.get("sanitized_query") or state["query"]
         messages = [
             *state.get("history", []),
-            {"role": "user", "content": f"{context}\n\nQuestion: {state['query']}"},
+            {"role": "user", "content": f"{context}\n\nQuestion: {query}"},
         ]
         try:
             result = await resources.chat_llm.complete(build_system_prompt(), messages)
@@ -54,9 +77,12 @@ def make_answer_from_memory(resources: AgentResources):
             }
         sources = _dedupe_sources(hits, "memory")
         answer = strip_markdown_images(result.text)  # T4 output defence (FR-M5-29)
-        if not re.search(r"(?im)^\s*sources\s*:", answer):  # real header, not "resources:"
-            listing = "\n".join(f"- {s['url']}" for s in sources)
-            answer = f"{answer}\n\nSources:\n{listing}"
+        # A5: drop any model-emitted trailing "Sources:" block (it may carry invented or
+        # injection-induced URLs) and ALWAYS append the programmatic listing built from the
+        # real hits, so displayed citations always equal the structured provenance set.
+        answer = re.split(r"(?im)^\s*sources\s*:.*$", answer, maxsplit=1)[0].rstrip()
+        listing = "\n".join(f"- {s['url']}" for s in sources)
+        answer = f"{answer}\n\nSources:\n{listing}"
         return {
             "route": "memory_hit",
             "answer": answer,
@@ -70,10 +96,10 @@ def make_answer_from_memory(resources: AgentResources):
 def make_answer_from_web(resources: AgentResources):
     async def answer_from_web(state: dict) -> dict:
         fetched = state["fetched_docs"]
+        source_dicts: list[dict] = []
         if fetched:
             # Bounded context: each page's summary + its first N chunks — never all.
             per_page = resources.settings.web_context_chunks_per_page
-            source_dicts: list[dict] = []
             for doc in fetched:
                 page_chunks = sorted(
                     (c for c in state["chunks"] if c["url"] == doc["url"]),
@@ -94,13 +120,20 @@ def make_answer_from_web(resources: AgentResources):
                         "sanitizer_flags": doc.get("sanitizer_flags", []),
                     }
                 )
+        # H2: key the grounded/degraded decision on usable CONTENT, not just fetched-list
+        # nonemptiness — a doc whose text the sanitizer stripped (no summary, no chunks)
+        # contributes zero parts above, so an empty source_dicts must degrade to the
+        # snippets path (never a clean "success" with an empty Sources header), exactly
+        # like the no-fetch case.
+        if source_dicts:
             # D9: a lingering redis_down (from memory_search) makes even a clean fetched
             # answer a degraded_web turn (FR-M5-24); otherwise it's a normal miss.
             degradation = state.get("degradation")
             route = "degraded_web" if degradation else "memory_miss_web_search"
             disclaimer = None
         else:
-            # Snippets-only degraded path: search succeeded but nothing was fetchable.
+            # Snippets-only degraded path: search succeeded but nothing was fetchable, or
+            # every fetched page yielded no usable text.
             source_dicts = [
                 {"url": r["url"], "title": r["title"], "text": r["snippet"]}
                 for r in state["search_results"]
@@ -111,16 +144,26 @@ def make_answer_from_web(resources: AgentResources):
 
         # In-hand content only — no memory.knn, no Redis reads on the miss path.
         context = wrap_context(source_dicts, origin="web")
+        # H1: the model sees the guard-capped sanitized_query, never the raw query.
+        query = state.get("sanitized_query") or state["query"]
         messages = [
             *state.get("history", []),
-            {"role": "user", "content": f"{context}\n\nQuestion: {state['query']}"},
+            {"role": "user", "content": f"{context}\n\nQuestion: {query}"},
         ]
         try:
             result = await resources.chat_llm.complete(build_system_prompt(), messages)
         except Exception as exc:  # noqa: BLE001 — node owns degradation; retries are M5's
+            # A7: ingest_content may have persisted chunks BEFORE this LLM call failed, so
+            # only claim "nothing was stored" when nothing actually was (cli treats both
+            # variants as a failed turn via FAILURE_APOLOGIES).
+            apology = (
+                WEB_FAILURE_AFTER_STORE_APOLOGY
+                if state.get("stored_chunk_ids")
+                else FAILURE_APOLOGY
+            )
             return {
                 "route": "failed",
-                "answer": FAILURE_APOLOGY,
+                "answer": apology,
                 "sources": [],
                 "errors": [
                     {
@@ -132,9 +175,11 @@ def make_answer_from_web(resources: AgentResources):
             }
         sources = _dedupe_sources(source_dicts, "web")
         answer = strip_markdown_images(result.text)  # T4 output defence (FR-M5-29)
-        if not re.search(r"(?im)^\s*sources\s*:", answer):  # real header, not "resources:"
-            listing = "\n".join(f"- {s['url']}" for s in sources)
-            answer = f"{answer}\n\nSources:\n{listing}"
+        # A5: drop any model-emitted trailing "Sources:" block and ALWAYS append the
+        # programmatic listing, so displayed citations always equal the provenance set.
+        answer = re.split(r"(?im)^\s*sources\s*:.*$", answer, maxsplit=1)[0].rstrip()
+        listing = "\n".join(f"- {s['url']}" for s in sources)
+        answer = f"{answer}\n\nSources:\n{listing}"
         if disclaimer:
             answer = f"{disclaimer}\n\n{answer}"
         return {

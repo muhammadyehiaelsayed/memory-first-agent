@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     # --- redis / memory ---
     redis_url: str = "redis://localhost:6379/0"
     memory_index_name: str = "web_memory"
+    # Key prefixes for the indexed chunk docs and the non-indexed meta hashes. Overridable so
+    # tests/evals can carve out a fully disjoint namespace (distinct index name AND prefix) on
+    # the same Redis: RediSearch indexes are instance-global and refuse a second index over an
+    # already-indexed prefix, so a distinct index name alone is not enough to avoid clobbering
+    # the demo — the prefix must differ too.
+    memory_chunk_prefix: str = "chunk"
+    memory_meta_prefix: str = "doc"
     similarity_threshold: float = 0.7  # inclusive: hit <=> (1 - distance) >= this
     memory_top_k: int = 5
     memory_ttl_seconds: int = 604800  # 7 days; 0 disables

@@ -43,6 +43,12 @@ the 150 module-level functions and class methods is pinned by a `# covers:` decl
 feature files, enforced bidirectionally by a traceability gate — index and matrix in
 [`docs/BDD.md`](docs/BDD.md).
 
+> **⚠️ Test isolation — your demo memory is safe.** The default `make test` is **Redis-free**
+> (no server needed). The Redis-backed `integration`/`e2e` tests and the `eval_lifecycle`
+> script run against an **isolated test namespace** (a separate test index / Redis DB), so they
+> no longer read, wipe, or poison the memory your live demo uses. Run `make test` for the
+> everyday keyless suite; the Redis-backed leg is opt-in via `make test-integration`.
+
 **No uv?** `pip install -e ".[dev]"` inside a Python 3.12 venv works as a fallback
 (uv + the committed `uv.lock` is the reproducible path).
 
@@ -166,10 +172,12 @@ sanitize-before-store) plus an output defence and a fetch-side SSRF guard:
 | T5 | SSRF via fetched URLs — a page redirecting to cloud-metadata / loopback / internal services | fetch-side guard in `web/fetch.py`: drop non-http(s) and private-IP-literal URLs, follow redirects manually with `_is_safe_fetch_target` re-checked on every hop, and reject hosts that DNS-resolve to a private/loopback/link-local address |
 
 Reliability: every upstream dependency has a single-owner retry policy
-(`utils/reliability.py`, tenacity) with typed failures; every failure mode has a designed
-degradation outcome (web-only on Redis down, snippets-only when all fetches fail, a clean
-`failed` apology when search/LLM/embeddings are down), and the turn is always logged exactly
-once — never a traceback. No jailbreak-proof claims: the layers are "basic but real".
+(`utils/reliability.py`, tenacity) with typed failures — including the keyless DuckDuckGo
+search fallback and the per-page summary LLM call, which now carry agent-owned
+deadlines/retries like the rest, so no upstream call runs unbounded. Every failure mode has a
+designed degradation outcome (web-only on Redis down, snippets-only when all fetches fail, a
+clean `failed` apology when search/LLM/embeddings are down), and the turn is always logged
+exactly once — never a traceback. No jailbreak-proof claims: the layers are "basic but real".
 
 ## Calibration & limitations
 
