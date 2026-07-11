@@ -30,6 +30,11 @@ jobs:
             exit 1
           fi
           echo "No committed secrets detected"
+      # Advisory only (continue-on-error): findings surface in logs without failing the build.
+      # Known open item: pytest is pinned to 8.4 despite PYSEC-2026-1845 (fixed in 9.0.3) — the
+      # fix requires pytest 9, but pytest-bdd 8.1 (latest) calls a pytest-9-deprecated fixture API
+      # and floods the run with deprecation warnings. It is a test-only dependency (never shipped
+      # at runtime), so the pin is held until pytest-bdd supports pytest 9 cleanly. See DECISIONS.md.
       - name: Dependency vulnerability audit (pip-audit, non-blocking)
         continue-on-error: true
         run: |

@@ -40,3 +40,17 @@ record cited by every milestone's plan.
 - **Token streaming** — the REPL streams graph *updates*, not tokens.
 - **Deep session memory** — chat history is the REPL's last 6 turns; the Redis memory is
   the assignment's knowledge store, not a conversation store.
+
+## Review-remediation decisions
+
+- **Test/eval Redis isolation by index name + key prefix, not logical DB** — RediSearch is
+  instance-global (it ignores `SELECT` and refuses a second index over an already-indexed
+  prefix), so the Redis-backed tests and the lifecycle eval carve out a disjoint namespace
+  (`web_memory_test` / `chunk_test` / `doc_test`) on the same instance. This lets `make test`
+  run against a live local Redis without ever dropping or repopulating the demo's `web_memory`
+  index. Index name and key prefixes are configurable via `Settings` (defaults unchanged).
+- **`pytest` held at 8.4 despite PYSEC-2026-1845** — the fix needs pytest 9, but pytest-bdd
+  8.1 (latest) uses a pytest-9-deprecated fixture API and floods every run with deprecation
+  warnings; the suite passes under 9 but is unusably noisy. pytest is a test-only dependency
+  (never shipped at runtime) and the CI audit is advisory (`continue-on-error`), so the pin is
+  held until pytest-bdd supports pytest 9 cleanly.
