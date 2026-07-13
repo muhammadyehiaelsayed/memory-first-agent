@@ -1,8 +1,8 @@
 # BDD Scenarios — Behavior Coverage for Every Python Function
 
 The agent's behavior is specified as executable Gherkin. **Every module-level
-function and class method in `src/` and `scripts/` (150 functions) has its own
-BDD scenario** (230 scenarios across 45 feature files), each derived from
+function and class method in `src/` and `scripts/` (152 functions) has its own
+BDD scenario** (232 scenarios across 45 feature files), each derived from
 the root feature `tests/bdd/features/00_main_functionality.feature` — the main
 functionality (memory-first answering over the five routes: `memory_hit`,
 `memory_miss_web_search`, `degraded_web`, `blocked`, `failed`).
@@ -69,7 +69,7 @@ of the suite — no separate BDD runner.
 | `resources.feature` | `src/memagent/resources.py` | "Report failure when the query cannot be embedded" | 2 | `tests/bdd/test_bdd_contracts.py` |
 | `routers.feature` | `src/memagent/routers.py` | "Answer from memory when a similar question was seen before" | 5 | `tests/bdd/test_bdd_orchestration.py` |
 | `scripts_capture_demo.feature` | `scripts/capture_demo.py` | "Answer from memory when a similar question was seen before" | 3 | `tests/bdd/test_bdd_scripts_evals.py` |
-| `scripts_eval_grounding.feature` | `scripts/eval_grounding.py` | "Fall back to the web and ingest what was found on a memory miss" | 6 | `tests/bdd/test_bdd_scripts_evals.py` |
+| `scripts_eval_grounding.feature` | `scripts/eval_grounding.py` | "Fall back to the web and ingest what was found on a memory miss" | 7 | `tests/bdd/test_bdd_scripts_evals.py` |
 | `scripts_eval_lifecycle.feature` | `scripts/eval_lifecycle.py` | "Fall back to the web and ingest what was found on a memory miss" | 5 | `tests/bdd/test_bdd_scripts_evals.py` |
 | `scripts_gen_env_example.feature` | `scripts/gen_env_example.py` | "Answer from memory when a similar question was seen before" | 3 | `tests/bdd/test_bdd_scripts_tooling.py` |
 | `scripts_render_graph.feature` | `scripts/render_graph.py` | "Fall back to the web and ingest what was found on a memory miss" | 3 | `tests/bdd/test_bdd_scripts_tooling.py` |
@@ -80,7 +80,7 @@ of the suite — no separate BDD runner.
 | `security_sanitizer.feature` | `src/memagent/security/sanitizer.py` | "Fall back to the web and ingest what was found on a memory miss" | 5 | `tests/bdd/test_bdd_security.py` |
 | `state.feature` | `src/memagent/state.py` | "Log exactly one analytics record for every turn" | 1 | `tests/bdd/test_bdd_contracts.py` |
 | `utils_errors.feature` | `src/memagent/utils/errors.py` | "Degrade gracefully when search succeeds but every page fetch fails" | 1 | `tests/bdd/test_bdd_utils.py` |
-| `utils_reliability.feature` | `src/memagent/utils/reliability.py` | "Report failure when the query cannot be embedded" | 8 | `tests/bdd/test_bdd_utils.py` |
+| `utils_reliability.feature` | `src/memagent/utils/reliability.py` | "Report failure when the query cannot be embedded" | 9 | `tests/bdd/test_bdd_utils.py` |
 | `utils_timing.feature` | `src/memagent/utils/timing.py` | "Log exactly one analytics record for every turn" | 1 | `tests/bdd/test_bdd_utils.py` |
 | `web_fetch.feature` | `src/memagent/web/fetch.py` | "Fall back to the web and ingest what was found on a memory miss" | 18 | `tests/bdd/test_bdd_web_fetch.py` |
 | `web_search.feature` | `src/memagent/web/search.py` | "Fall back to the web and ingest what was found on a memory miss" | 8 | `tests/bdd/test_bdd_web_search.py` |
@@ -88,7 +88,7 @@ of the suite — no separate BDD runner.
 
 ## Function → scenario traceability matrix
 
-222 coverage declarations for 150 functions.
+225 coverage declarations for 152 functions.
 
 | Function | Scenario | Feature file |
 |---|---|---|
@@ -253,6 +253,7 @@ of the suite — no separate BDD runner.
 | `memagent.utils.reliability._status` | The HTTP status is extracted from both SDK and transport errors | `utils_reliability.feature` |
 | `memagent.utils.reliability.fetch_retry` | A non-retryable page fetch becomes a non-fatal PageFetchError while a timeout is retried once | `utils_reliability.feature` |
 | `memagent.utils.reliability.llm_retry` | A transient LLM call retries to success then an auth failure fast-fails as a typed error | `utils_reliability.feature` |
+| `memagent.utils.reliability.summary_retry` | The page summary retries a transient error once then re-raises after the 2-attempt budget | `utils_reliability.feature` |
 | `memagent.utils.reliability.tavily_retry` | Auth failures fall through to the fallback while exhausted search retries raise the typed error | `utils_reliability.feature` |
 | `memagent.utils.timing.timed` | A stage timing is measured and merged without clobbering node-supplied timings | `utils_timing.feature` |
 | `memagent.web.fetch.HttpxPageFetcher.__init__` | The fetcher handles redirects manually, with bounded concurrency and an honest User-Agent | `web_fetch.feature` |
@@ -273,6 +274,7 @@ of the suite — no separate BDD runner.
 | `memagent.web.fetch._registrable_domain` | The registrable domain collapses to its last two labels | `web_fetch.feature` |
 | `memagent.web.fetch.filter_urls` | Denylisted domains are dropped and each domain is capped for diversity | `web_fetch.feature` |
 | `memagent.web.fetch.filter_urls` | Unsafe schemes and private hosts are removed by the URL filter | `web_fetch.feature` |
+| `memagent.web.search.DdgsSearcher.__init__` | The keyless DuckDuckGo fallback maps result fields and ranks by order | `web_search.feature` |
 | `memagent.web.search.DdgsSearcher.search` | The keyless DuckDuckGo fallback maps result fields and ranks by order | `web_search.feature` |
 | `memagent.web.search.FallbackProvider.__init__` | A freshly built fallback provider has not yet chosen a provider | `web_search.feature` |
 | `memagent.web.search.FallbackProvider.search` | On a memory miss the provider searches Tavily first and records it | `web_search.feature` |
@@ -292,6 +294,7 @@ of the suite — no separate BDD runner.
 | `scripts.eval_grounding._render` | The scorecard prints per-case rows, an aggregate, and an honest disclaimer | `scripts_eval_grounding.feature` |
 | `scripts.eval_grounding._run_mock` | The keyless mock run derives verdicts from real answers and passes on correct behaviour | `scripts_eval_grounding.feature` |
 | `scripts.eval_grounding._run_real` | The real run drives the OpenAI-backed answerer and judge | `scripts_eval_grounding.feature` |
+| `scripts.eval_grounding._run_real` | The real run exits non-zero when the judge reports a bad grounding verdict | `scripts_eval_grounding.feature` |
 | `scripts.eval_grounding._score` | Scoring drives every fixed case through the answerer and the judge | `scripts_eval_grounding.feature` |
 | `scripts.eval_grounding.main` | The grounding entrypoint runs keylessly under the mock flag and exits zero | `scripts_eval_grounding.feature` |
 | `scripts.eval_grounding.main` | The grounding entrypoint without a key or the mock flag fails readably | `scripts_eval_grounding.feature` |
